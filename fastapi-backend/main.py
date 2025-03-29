@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware  # Import CORS middleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
@@ -6,6 +7,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = FastAPI()
+
+# ✅ Add CORS Middleware to allow frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (change this later for security)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 
 # Connect to MongoDB Atlas
 MONGO_URI = os.getenv("MONGO_URI")
