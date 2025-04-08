@@ -1,0 +1,48 @@
+{
+  "train_id": "101",
+  "name": "Rajdhani Express",
+  "current_status": "in_service",
+  "current_route_id": "R101",
+  "current_route_ref": { "$oid": "67e80645e4a58df990138c2b" }
+}
+
+{
+  "route_id": "R101",
+  "route_name": "Delhi to Mumbai",
+  "assigned_train_id": "101"
+  "assigned_train_ref": { "$oid": "67e80645e4a58df990138c2b" }
+  "checkpoints": [
+    {
+      "timestamp": {
+    "$date": "2025-03-29T14:00:00.000Z"
+    },
+      "rfid_tag": "RFID_101_A1",  // Physical RFID expected
+      "location": [77.2090, 28.6139]  // [long, lat]
+    },
+    {
+      "timestamp": {
+    "$date": "2025-03-29T14:00:00.000Z"
+  },
+      "rfid_tag": null,  // No RFID expected here (GPS-only segment)
+      "location": [77.1025, 28.7041],
+    },
+    {
+      "timestamp": {
+    "$date": "2025-03-29T14:00:00.000Z"
+  },
+      "rfid_tag": "RFID_101_B2",  // Back to RFID verification
+      "location": [76.8512, 28.7041]
+    }
+  ]
+}
+
+
+{
+  "train_id": "101",
+  "train_ref": { "$oid": "67e80645e4a58df990138c2b" },
+    "timestamp": {
+    "$date": "2025-03-29T14:00:00.000Z"
+    },
+      "rfid_tag": "RFID_101_B2",  // Back to RFID verification
+      "location": [76.8512, 28.7041]
+}
