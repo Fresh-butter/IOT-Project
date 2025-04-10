@@ -26,3 +26,14 @@ async def close_mongodb_connection():
 def get_collection(collection_name):
     """Get a collection from the database"""
     return db[collection_name]
+
+class PyObjectId(str):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return str(v)

@@ -1,11 +1,6 @@
-"""
-Train schema module.
-Defines Pydantic models for train data validation and serialization.
-"""
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
-from datetime import datetime
+from pydantic import BaseModel, Field, validator
 from bson import ObjectId
+from typing import Optional
 
 class PyObjectId(str):
     @classmethod
@@ -14,33 +9,49 @@ class PyObjectId(str):
 
     @classmethod
     def validate(cls, v):
-        if not ObjectId.is_valid(v):
+        if v is not None and not ObjectId.is_valid(v):
             raise ValueError("Invalid ObjectId")
-        return str(v)
+        return str(v) if v is not None else None
+
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string", format="object-id", nullable=True)
 
 class TrainBase(BaseModel):
-    # Define train fields based on your schema
-    train_id: str
-    train_name: Optional[str] = None
-    status: Optional[str] = None
-    current_location: Optional[List[float]] = None
-    current_speed: Optional[float] = None
-    
+    train_id: str = Field(..., min_length=3)
+    name: Optional[str] = None
+    current_status: Optional[str] = None
+    current_route_id: Optional[str] = None
+    current_route_ref: Optional[PyObjectId] = None
+
+    @validator('current_status')
+    def validate_status(cls, v):
+        allowed_statuses = [
+            "in_service_running",
+            "in_service_not_running",
+            "maintenance",
+            "out_of_service",
+            None  # Allow null values for current_status
+        ]
+        if v not in allowed_statuses:
+            raise ValueError(f"Invalid status. Allowed values are: {allowed_statuses}")
+        return v
+
+    class Config:
+        json_encoders = {ObjectId: str}
+
 class TrainCreate(TrainBase):
     pass
 
 class TrainUpdate(BaseModel):
     train_id: Optional[str] = None
-    train_name: Optional[str] = None
-    status: Optional[str] = None
-    current_location: Optional[List[float]] = None
-    current_speed: Optional[float] = None
+    name: Optional[str] = None
+    current_status: Optional[str] = None
+    current_route_id: Optional[str] = None
+    current_route_ref: Optional[PyObjectId] = None
 
 class TrainInDB(TrainBase):
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    
+    id: PyObjectId = Field(..., alias="_id")
+
     class Config:
         allow_population_by_field_name = True
-        json_encoders = {
-            ObjectId: str
-        }
