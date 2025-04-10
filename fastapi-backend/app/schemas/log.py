@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import re
 
@@ -31,24 +31,35 @@ class LogBase(BaseModel):
     @validator("timestamp", pre=True)
     def normalize_timestamp(cls, value):
         if isinstance(value, str):
-            # Fix common formatting issues
-            value = re.sub(r"(\+\d{1,2}):(\d{1})$", r"\1\230", value)  # Fix +05:3 → +05:30
-            value = value.replace(" IST", "+05:30")  # Handle old format
-            
-            # Try multiple valid formats
+            # Normalize timezone offset format (+05:30 → +0530)
+            value = re.sub(r"([+-]\d{2}):(\d{2})$", r"\1\2", value)
+
+            # Try parsing with different formats
             formats = [
-                "%Y-%m-%dT%H:%M:%S%z",
-                "%Y-%m-%dT%H:%M:%S.%f%z",
-                "%Y-%m-%dT%H:%M:%S+05:30",
-                "%Y-%m-%dT%H:%M:%S.%f+05:30"
+                "%Y-%m-%dT%H:%M:%S.%f%z",  # With milliseconds and timezone
+                "%Y-%m-%dT%H:%M:%S%z",     # Without milliseconds, with timezone
+                "%Y-%m-%dT%H:%M:%S",       # Without timezone (default to IST)
             ]
             
             for fmt in formats:
                 try:
-                    return datetime.strptime(value, fmt)
+                    parsed = datetime.strptime(value, fmt)
+                    # Add IST timezone if missing
+                    if not parsed.tzinfo:
+                        parsed = parsed.replace(tzinfo=timezone(timedelta(hours=5, minutes=30)))
+                    return parsed
                 except ValueError:
                     continue
-        raise ValueError(f"Invalid datetime format: {value}")
+
+            raise ValueError(f"Invalid datetime format: {value}")
+
+        elif isinstance(value, datetime):
+            # Handle datetime objects directly
+            if not value.tzinfo:
+                value = value.replace(tzinfo=timezone(timedelta(hours=5, minutes=30)))
+            return value
+
+        raise ValueError("Timestamp must be a string or datetime object")
 
     class Config:
         json_encoders = {
@@ -56,13 +67,13 @@ class LogBase(BaseModel):
         }
         schema_extra = {
             "example": {
-                "train_id": "201",
-                "train_ref": "67f72f93481176d59dec04a6",
+                "train_id": "101",
+                "train_ref": "67e80645e4a58df990138c2b",
                 "timestamp": "2025-04-10T14:23:05+05:30",
-                "rfid_tag": "a1b2c3d4",
-                "location": [17.447528, 78.348740],
+                "rfid_tag": "RFID_101_B2",
+                "location": [76.8512, 28.7041],
                 "accuracy": "good",
-                "is_test": True
+                "is_test": False
             }
         }
 
