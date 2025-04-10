@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
 from bson import ObjectId
@@ -15,30 +15,43 @@ class PyObjectId(str):
         return str(v) if v else None
 
     @classmethod
-    def __get_pydantic_json_schema__(cls, schema, handler):
-        json_schema = handler(schema)
-        json_schema.update(type="string", format="object-id", nullable=True)
-        return json_schema
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string", format="object-id", nullable=True)
 
 class LogBase(BaseModel):
     train_id: str = Field(..., min_length=1)
-    train_ref: PyObjectId = Field(..., description="MongoDB ObjectId reference for the train")
-    rfid_tag: Optional[str] = Field(None, description="RFID tag detected by the device")
-    location: Optional[List[float]] = Field(
-        None,
-        min_items=2,
-        max_items=2,
-        description="Geographical coordinates [longitude, latitude]"
-    )
-    timestamp: datetime = Field(..., description="Timestamp in ISO8601 format with timezone offset")
-    accuracy: Optional[str] = Field(
-        None,
-        description="Accuracy category (e.g., excellent, good, moderate, poor, invalid)"
-    )
-    is_test: bool = Field(..., description="Flag to indicate if the log is test data")
+    train_ref: PyObjectId = Field(...)
+    rfid_tag: Optional[str] = None
+    location: Optional[List[float]] = Field(None, min_items=2, max_items=2)
+    timestamp: datetime = Field(...)
+    accuracy: Optional[str] = None
+    is_test: bool = Field(...)
+
+    @validator("timestamp", pre=True)
+    def parse_timestamp(cls, value):
+        if isinstance(value, str):
+            # Handle missing/invalid timezone offset
+            if "+05:3" in value:
+                value = value.replace("+05:3", "+05:30")
+            
+            # Try multiple datetime formats
+            for fmt in (
+                "%Y-%m-%dT%H:%M:%S%z",        # Without milliseconds
+                "%Y-%m-%dT%H:%M:%S.%f%z",     # With milliseconds
+                "%Y-%m-%dT%H:%M:%S+05:30",    # IST offset without ms
+                "%Y-%m-%dT%H:%M:%S.%f+05:30"  # IST offset with ms
+            ):
+                try:
+                    return datetime.strptime(value, fmt)
+                except ValueError:
+                    continue
+        raise ValueError("Invalid datetime format")
 
     class Config:
-        json_schema_extra = {
+        json_encoders = {
+            ObjectId: str
+        }
+        schema_extra = {
             "example": {
                 "train_id": "101",
                 "train_ref": "67e80645e4a58df990138c2b",
@@ -66,4 +79,4 @@ class LogInDB(LogBase):
     id: PyObjectId = Field(..., alias="_id")
 
     class Config:
-        populate_by_name = True  # Updated for Pydantic v2 compatibility
+        allow_population_by_field_name = True
