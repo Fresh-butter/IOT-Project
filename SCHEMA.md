@@ -54,3 +54,24 @@
 ```
 
 *interval is in seconds
+
+## logs
+
+```json
+{
+  "train_id": "101",
+  "train_ref": "67e80645e4a58df990138c2b",
+  "rfid_tag": "RFID_101_B2",               
+  "location": [76.8512, 28.7041],          
+  "timestamp": "2025-04-10T14:23:05+05:30",
+  "accuracy": "good",                      
+  "is_test": false                        
+}
+```
+| HDOP Range    | Satellites | Accuracy Category | Description               |
+|---------------|------------|-------------------|---------------------------|
+| ≤ 1.0         | ≥ 6        | excellent         | < 5 meter error           |
+| 1.1 - 2.0     | 4-5        | good              | 5-10 meter error          |
+| 2.1 - 5.0     | 3-4        | moderate          | 10-25 meter error         |
+| > 5.0         | < 3        | poor              | > 25 meter error          |
+| N/A           | 0          | invalid           | No GPS fix                |

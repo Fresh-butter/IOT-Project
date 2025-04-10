@@ -33,27 +33,6 @@ async def get_route_by_train(train_id: str):
         raise HTTPException(status_code=404, detail="Route not found for this train")
     return route
 
-@router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def create_route(route: RouteCreate = Body(...)):
-    """Create a new route"""
-    route_id = await RouteModel.create(route.dict())
-    return {"id": route_id, "message": "Route created successfully"}
-
-@router.put("/{id}", response_model=dict)
-async def update_route(id: str, route: RouteUpdate = Body(...)):
-    """Update a route"""
-    # Filter out None values
-    route_data = {k: v for k, v in route.dict().items() if v is not None}
-    
-    if not route_data:
-        raise HTTPException(status_code=400, detail="No valid update data provided")
-    
-    updated = await RouteModel.update(id, route_data)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Route not found")
-    
-    return {"message": "Route updated successfully"}
-
 @router.delete("/{id}", response_model=dict)
 async def delete_route(id: str):
     """Delete a route"""
@@ -62,3 +41,34 @@ async def delete_route(id: str):
         raise HTTPException(status_code=404, detail="Route not found")
     
     return {"message": "Route deleted successfully"}
+
+@router.post("/", response_model=RouteInDB, status_code=status.HTTP_201_CREATED)
+async def create_route(route: RouteCreate = Body(...)):
+    try:
+        route_id = await RouteModel.create(route.dict())
+        created_route = await RouteModel.get_by_id(route_id)
+        return RouteInDB(**created_route)
+    except ValueError as ve:
+        raise HTTPException(400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(500, detail=f"Server error: {str(e)}")
+
+@router.put("/{id}", response_model=RouteInDB)
+async def update_route(id: str, route: RouteUpdate = Body(...)):
+    try:
+        update_data = {k: v for k, v in route.dict().items() if v is not None}
+        
+        if not update_data:
+            raise HTTPException(400, detail="No update data provided")
+            
+        updated = await RouteModel.update(id, update_data)
+        if not updated:
+            raise HTTPException(404, detail="Route not found")
+            
+        updated_route = await RouteModel.get_by_id(id)
+        return RouteInDB(**updated_route)
+    except ValueError as ve:
+        raise HTTPException(400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(500, detail=f"Server error: {str(e)}")
+

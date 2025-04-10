@@ -3,6 +3,7 @@
 Database connection module.
 Handles connection to MongoDB Atlas and provides database access functions.
 """
+from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.config import MONGODB_URL, DB_NAME
 
@@ -34,6 +35,11 @@ class PyObjectId(str):
 
     @classmethod
     def validate(cls, v):
-        if not ObjectId.is_valid(v):
+        if v and not ObjectId.is_valid(v):
             raise ValueError("Invalid ObjectId")
-        return str(v)
+        return str(v) if v else None  # Allow null values
+
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        # Add this method for OpenAPI documentation
+        field_schema.update(type="string", format="object-id", nullable=True)
