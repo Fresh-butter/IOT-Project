@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
 from bson import ObjectId
+import re
 
 class PyObjectId(str):
     @classmethod
@@ -28,24 +29,26 @@ class LogBase(BaseModel):
     is_test: bool = Field(...)
 
     @validator("timestamp", pre=True)
-    def parse_timestamp(cls, value):
+    def normalize_timestamp(cls, value):
         if isinstance(value, str):
-            # Handle missing/invalid timezone offset
-            if "+05:3" in value:
-                value = value.replace("+05:3", "+05:30")
+            # Fix common formatting issues
+            value = re.sub(r"(\+\d{1,2}):(\d{1})$", r"\1\230", value)  # Fix +05:3 → +05:30
+            value = value.replace(" IST", "+05:30")  # Handle old format
             
-            # Try multiple datetime formats
-            for fmt in (
-                "%Y-%m-%dT%H:%M:%S%z",        # Without milliseconds
-                "%Y-%m-%dT%H:%M:%S.%f%z",     # With milliseconds
-                "%Y-%m-%dT%H:%M:%S+05:30",    # IST offset without ms
-                "%Y-%m-%dT%H:%M:%S.%f+05:30"  # IST offset with ms
-            ):
+            # Try multiple valid formats
+            formats = [
+                "%Y-%m-%dT%H:%M:%S%z",
+                "%Y-%m-%dT%H:%M:%S.%f%z",
+                "%Y-%m-%dT%H:%M:%S+05:30",
+                "%Y-%m-%dT%H:%M:%S.%f+05:30"
+            ]
+            
+            for fmt in formats:
                 try:
                     return datetime.strptime(value, fmt)
                 except ValueError:
                     continue
-        raise ValueError("Invalid datetime format")
+        raise ValueError(f"Invalid datetime format: {value}")
 
     class Config:
         json_encoders = {
@@ -53,13 +56,13 @@ class LogBase(BaseModel):
         }
         schema_extra = {
             "example": {
-                "train_id": "101",
-                "train_ref": "67e80645e4a58df990138c2b",
+                "train_id": "201",
+                "train_ref": "67f72f93481176d59dec04a6",
                 "timestamp": "2025-04-10T14:23:05+05:30",
-                "rfid_tag": "RFID_101_B2",
-                "location": [76.8512, 28.7041],
+                "rfid_tag": "a1b2c3d4",
+                "location": [17.447528, 78.348740],
                 "accuracy": "good",
-                "is_test": False
+                "is_test": True
             }
         }
 
