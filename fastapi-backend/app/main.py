@@ -5,7 +5,6 @@ import logging
 from app.database import connect_to_mongodb, close_mongodb_connection
 from app.routes.train import router as train_router
 from app.routes.route import router as route_router
-from app.routes.user import router as user_router
 from app.routes.alert import router as alert_router
 from app.routes.log import router as log_router
 
@@ -15,7 +14,7 @@ logging.basicConfig(level=logging.DEBUG)
 # Initialize FastAPI app
 app = FastAPI(
     title="Train Collision Avoidance System API",
-    description="API for IoT-based Train Collision Avoidance System",
+    description="API for IoT-based Train Collision Avoidance System using GPS and RFID technology",
     version="1.0.0"
 )
 
@@ -47,13 +46,14 @@ async def shutdown_db_client():
     await close_mongodb_connection()
     logging.info("Database connection closed")
 
-# Include routers
-app.include_router(user_router, prefix="/api/users", tags=["Users"])
+# Include routers - removed user router
 app.include_router(train_router, prefix="/api/trains", tags=["Trains"])
 app.include_router(route_router, prefix="/api/routes", tags=["Routes"])
 app.include_router(alert_router, prefix="/api/alerts", tags=["Alerts"])
 app.include_router(log_router, prefix="/api/logs", tags=["Logs"])
 
-@app.get("/")
+@app.get("/", 
+         summary="Health check endpoint", 
+         description="Returns a welcome message to confirm the API is running")
 async def root():
     return {"message": "Welcome to Train Collision Avoidance System API"}

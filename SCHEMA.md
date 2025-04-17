@@ -1,22 +1,14 @@
 # MongoDB Schema Documentation
 
-## users
-
-```json
-{
-  "username": "Navneet",
-  "hashed_password": "*****"
-}
-```
 ## trains
 
 ```json
 {
-  "train_id": 101,
+  "train_id": "101",
   "name": "IIITH Express",
   "current_status": "in_service_running",
   "current_route_id": "R101",
-  "current_route_ref": { "$oid": "67e80645e4a58df990138c2b" }
+  "current_route_ref": "67e80645e4a58df990138c2b"
 }
 ```
 
@@ -30,9 +22,7 @@
   "route_name": "Delhi to Mumbai",
   "start_time": "2025-03-29T19:30:00+05:30",
   "assigned_train_id": "101",
-  "assigned_train_ref": {
-    "$oid": "67e80645e4a58df990138c2b"
-  },
+  "assigned_train_ref": "67e80645e4a58df990138c2b",
   "checkpoints": [
     {
       "interval": 0,
@@ -68,10 +58,24 @@
   "is_test": false                        
 }
 ```
-| HDOP Range    | Satellites | Accuracy Category | Description               |
-|---------------|------------|-------------------|---------------------------|
-| ≤ 1.0         | ≥ 6        | excellent         | < 5 meter error           |
-| 1.1 - 2.0     | 4-5        | good              | 5-10 meter error          |
-| 2.1 - 5.0     | 3-4        | moderate          | 10-25 meter error         |
-| > 5.0         | < 3        | poor              | > 25 meter error          |
-| N/A           | 0          | invalid           | No GPS fix                |
+### GPS Accuracy Classification (Based on HDOP and Satellite Count)
+
+| HDOP Range      | Minimum Satellites | Category           | Description             | Estimated Error (m) |
+|-----------------|--------------------|--------------------|-------------------------|----------------------|
+| ≤ 1.0           | ≥ 6                | Excellent          | Ideal GPS fix           | < 5                  |
+| 1.0 – 2.0       | ≥ 5                | Good               | Strong and accurate fix | 5 – 10               |
+| 2.0 – 5.0       | ≥ 4                | Moderate           | Acceptable, some errors | 10 – 25              |
+| 5.0 – 10.0      | ≥ 3                | Poor               | Weak GPS fix            | 25 – 50              |
+| > 10.0 or N/A   | < 3 or None        | Very Poor/Invalid  | Very high error or no fix | > 50 or No Fix     |
+
+## alerts
+
+```json
+{
+  "sender_id": "67e80281e4a58df990138c24",
+  "recipient_id": "67e802cee4a58df990138c26",
+  "message": "Train 202 stopped unexpectedly.",
+  "location": [76.8512, 28.7041],   
+  "timestamp": "2025-04-10T14:23:05+05:30"
+}
+```

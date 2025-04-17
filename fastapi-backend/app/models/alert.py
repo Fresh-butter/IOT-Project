@@ -6,6 +6,7 @@ from typing import List, Optional
 from bson import ObjectId
 from datetime import datetime
 from app.database import get_collection
+from app.config import get_current_ist_time
 
 class AlertModel:
     collection = "alerts"
@@ -34,7 +35,7 @@ class AlertModel:
         """Create a new alert"""
         # Ensure timestamp is set if not provided
         if "timestamp" not in alert_data:
-            alert_data["timestamp"] = datetime.utcnow()
+            alert_data["timestamp"] = get_current_ist_time()
             
         # Convert string IDs to ObjectIds
         if "sender_id" in alert_data and isinstance(alert_data["sender_id"], str):
