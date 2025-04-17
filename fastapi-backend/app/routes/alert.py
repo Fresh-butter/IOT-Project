@@ -18,11 +18,12 @@ router = APIRouter()
            summary="Get all alerts",
            description="Retrieve a list of all alerts in the system")
 async def get_alerts(
-    limit: Optional[int] = Query(100, description="Limit the number of results returned")
+    limit: Optional[int] = Query(100, description="Limit the number of results returned"),
+    skip: Optional[int] = Query(0, description="Number of results to skip")
 ):
-    """Get all alerts with optional limit"""
-    alerts = await AlertModel.get_all()
-    return alerts[:limit]
+    """Get all alerts with pagination"""
+    alerts = await AlertModel.get_all(limit=limit, skip=skip)
+    return alerts
 
 @router.get("/{id}", 
            response_model=AlertInDB,

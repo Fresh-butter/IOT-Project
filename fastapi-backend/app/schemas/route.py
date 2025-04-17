@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, validator
 from typing import List, Optional
 from bson import ObjectId
 from app.database import PyObjectId
+from app.utils import normalize_timestamp, round_coordinates
 
 class Checkpoint(BaseModel):
     """
@@ -33,10 +34,8 @@ class Checkpoint(BaseModel):
 
     @validator('location')
     def validate_location(cls, v):
-        """Validates and rounds location coordinates to 6 decimal places"""
-        if len(v) != 2:
-            raise ValueError("Location must contain exactly 2 coordinates")
-        return [round(coord, 6) for coord in v]
+        """Validates and rounds location coordinates to 5 decimal places"""
+        return round_coordinates(v)  # Use the utility function
 
     class Config:
         schema_extra = {
@@ -87,6 +86,13 @@ class RouteBase(BaseModel):
         if v and v[0].interval != 0:
             raise ValueError("First checkpoint must have interval 0")
         return v
+
+    @validator("start_time", pre=True)
+    def validate_start_time(cls, value):
+        """Validates and normalizes start_time to IST timezone"""
+        if value is None:
+            return None
+        return normalize_timestamp(value)
 
     class Config:
         json_encoders = {ObjectId: str}

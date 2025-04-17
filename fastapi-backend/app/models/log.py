@@ -6,6 +6,7 @@ from bson import ObjectId
 from datetime import datetime
 from app.database import get_collection
 from app.config import get_current_ist_time
+from app.utils import round_coordinates
 
 class LogModel:
     collection = "logs"
@@ -28,6 +29,10 @@ class LogModel:
         # Convert train_ref string to ObjectId for MongoDB storage
         if "train_ref" in log_data and log_data["train_ref"]:
             log_data["train_ref"] = ObjectId(log_data["train_ref"])
+        
+        # Round coordinates if location is present
+        if "location" in log_data and log_data["location"]:
+            log_data["location"] = round_coordinates(log_data["location"])
             
         result = await get_collection(LogModel.collection).insert_one(log_data)
         return str(result.inserted_id)
@@ -47,6 +52,10 @@ class LogModel:
         # Handle ObjectId conversion for updates
         if "train_ref" in update_data and update_data["train_ref"]:
             update_data["train_ref"] = ObjectId(update_data["train_ref"])
+        
+        # Round coordinates if location is present
+        if "location" in update_data and update_data["location"]:
+            update_data["location"] = round_coordinates(update_data["location"])
         
         result = await get_collection(LogModel.collection).update_one(
             {"_id": ObjectId(id)},

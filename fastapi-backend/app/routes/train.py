@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, status, Body, Path, Query
 from typing import List, Optional
 from app.models.train import TrainModel
 from app.schemas.train import TrainCreate, TrainUpdate, TrainInDB
+from app.utils import handle_exceptions
 
 router = APIRouter()
 
@@ -14,18 +15,14 @@ router = APIRouter()
              status_code=status.HTTP_201_CREATED,
              summary="Create a new train",
              description="Create a new train with the provided information")
+@handle_exceptions("creating train")
 async def create_train(train: TrainCreate = Body(...)):
     """Create a new train"""
-    try:
-        train_id = await TrainModel.create(train.dict())
-        created_train = await TrainModel.get_by_id(train_id)
-        if not created_train:
-            raise HTTPException(status_code=500, detail="Failed to retrieve created train")
-        return TrainInDB(**created_train)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error creating train: {str(e)}")
+    train_id = await TrainModel.create(train.dict())
+    created_train = await TrainModel.get_by_id(train_id)
+    if not created_train:
+        raise HTTPException(status_code=500, detail="Failed to retrieve created train")
+    return TrainInDB(**created_train)
 
 @router.put("/{id}", 
             response_model=TrainInDB,

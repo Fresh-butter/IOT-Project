@@ -27,17 +27,17 @@
     {
       "interval": 0,
       "rfid_tag": "RFID_101_A1",
-      "location": [77.209, 28.6139]
+      "location": [77.20900, 28.61390]
     },
     {
       "interval": 3600,
       "rfid_tag": null,
-      "location": [77.1025, 28.7041]
+      "location": [77.10250, 28.70410]
     },
     {
       "interval": 7200,
       "rfid_tag": "RFID_101_B2",
-      "location": [76.8512, 28.7041]
+      "location": [76.85125, 28.70412]
     }
   ]
 }
@@ -52,7 +52,7 @@
   "train_id": "101",
   "train_ref": "67e80645e4a58df990138c2b",
   "rfid_tag": "RFID_101_B2",               
-  "location": [76.8512, 28.7041],          
+  "location": [76.85125, 28.70412],          
   "timestamp": "2025-04-10T14:23:05+05:30",
   "accuracy": "good",                      
   "is_test": false                        
@@ -75,7 +75,7 @@
   "sender_id": "67e80281e4a58df990138c24",
   "recipient_id": "67e802cee4a58df990138c26",
   "message": "Train 202 stopped unexpectedly.",
-  "location": [76.8512, 28.7041],   
+  "location": [76.85125, 28.70412],   
   "timestamp": "2025-04-10T14:23:05+05:30"
 }
 ```

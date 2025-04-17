@@ -24,11 +24,6 @@
 ## Code V1
 
 ```
-/*
-  Combined GPS and RFID Reader for ESP32
-  Improved version with better data validation
-*/
-
 #include <MFRC522v2.h>
 #include <MFRC522DriverSPI.h>
 #include <MFRC522DriverPinSimple.h>
@@ -155,24 +150,55 @@ void readGpsData() {
       // Update date/time data - time can be valid even without good GPS fix
       if (gps.date.isValid() && gps.time.isValid()) {
         // Convert UTC to IST (UTC+5:30)
-        int hour = gps.time.hour();
-        int minute = gps.time.minute();
-        int second = gps.time.second();
-        
-        // Add 5 hours and 30 minutes for IST
-        hour = (hour + 5) % 24;
-        minute = minute + 30;
-        if (minute >= 60) {
-          minute -= 60;
-          hour = (hour + 1) % 24;
-        }
-        
-        sensorData.dateTime = String(gps.date.year()) + "/" + 
-                          (gps.date.month() < 10 ? "0" : "") + String(gps.date.month()) + "/" + 
-                          (gps.date.day() < 10 ? "0" : "") + String(gps.date.day()) + "," + 
-                          (hour < 10 ? "0" : "") + String(hour) + ":" + 
-                          (minute < 10 ? "0" : "") + String(minute) + ":" + 
-                          (second < 10 ? "0" : "") + String(second) + " IST";
+int year = gps.date.year();
+int month = gps.date.month();
+int day = gps.date.day();
+int hour = gps.time.hour();
+int minute = gps.time.minute();
+int second = gps.time.second();
+
+// Add 5 hours and 30 minutes for IST
+hour = hour + 5;
+minute = minute + 30;
+
+// Handle minute overflow
+if (minute >= 60) {
+  minute -= 60;
+  hour++;
+}
+
+// Handle hour overflow (day change)
+if (hour >= 24) {
+  hour -= 24;
+  day++;
+  
+  // Handle month end cases (simplified)
+  int daysInMonth[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  
+  // Adjust for leap year February
+  if (month == 2 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
+    daysInMonth[2] = 29;
+  }
+  
+  // Handle month rollover
+  if (day > daysInMonth[month]) {
+    day = 1;
+    month++;
+    
+    // Handle year rollover
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+}
+
+sensorData.dateTime = String(year) + "/" + 
+                      (month < 10 ? "0" : "") + String(month) + "/" + 
+                      (day < 10 ? "0" : "") + String(day) + "," + 
+                      (hour < 10 ? "0" : "") + String(hour) + ":" + 
+                      (minute < 10 ? "0" : "") + String(minute) + ":" + 
+                      (second < 10 ? "0" : "") + String(second) + " IST";
       }
     }
   }
@@ -196,10 +222,10 @@ void printCombinedData() {
   
   // Print location data
   Serial.print("  Latitude: ");
-  Serial.println(sensorData.gpsValid ? String(sensorData.latitude, 6) : "null");
+  Serial.println(sensorData.gpsValid ? String(sensorData.latitude, 5) : "null");
   
   Serial.print("  Longitude: "); 
-  Serial.println(sensorData.gpsValid ? String(sensorData.longitude, 6) : "null");
+  Serial.println(sensorData.gpsValid ? String(sensorData.longitude, 5) : "null");
   
   // Print speed data
   Serial.print("  Speed: ");

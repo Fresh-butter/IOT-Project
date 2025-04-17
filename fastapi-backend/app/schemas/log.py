@@ -4,25 +4,11 @@ Defines Pydantic models for log data validation and serialization.
 """
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from bson import ObjectId
-import re
 from enum import Enum
-
-class PyObjectId(str):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v):
-        if v and not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return str(v) if v else None
-
-    @classmethod
-    def __modify_schema__(cls, field_schema):
-        field_schema.update(type="string", format="object-id", nullable=True)
+from app.database import PyObjectId
+from app.utils import normalize_timestamp, round_coordinates
 
 class AccuracyCategory(str, Enum):
     """GPS accuracy categories based on HDOP and satellite count"""
@@ -53,7 +39,7 @@ class LogBase(BaseModel):
         min_items=2, 
         max_items=2, 
         description="GPS coordinates as [longitude, latitude]",
-        example=[76.8512, 28.7041]
+        example=[76.85125, 28.70412]
     )
     timestamp: datetime = Field(
         ..., 
@@ -73,45 +59,15 @@ class LogBase(BaseModel):
 
     @validator("timestamp", pre=True)
     def normalize_timestamp(cls, value):
-        if isinstance(value, str):
-            # Normalize timezone offset format (+05:30 → +0530)
-            value = re.sub(r"([+-]\d{2}):(\d{2})$", r"\1\2", value)
-
-            # Try parsing with different formats
-            formats = [
-                "%Y-%m-%dT%H:%M:%S.%f%z",  # With milliseconds and timezone
-                "%Y-%m-%dT%H:%M:%S%z",     # Without milliseconds, with timezone
-                "%Y-%m-%dT%H:%M:%S",       # Without timezone (default to IST)
-            ]
-            
-            for fmt in formats:
-                try:
-                    parsed = datetime.strptime(value, fmt)
-                    # Add IST timezone if missing
-                    if not parsed.tzinfo:
-                        parsed = parsed.replace(tzinfo=timezone(timedelta(hours=5, minutes=30)))
-                    return parsed
-                except ValueError:
-                    continue
-
-            raise ValueError(f"Invalid datetime format: {value}")
-
-        elif isinstance(value, datetime):
-            # Handle datetime objects directly
-            if not value.tzinfo:
-                value = value.replace(tzinfo=timezone(timedelta(hours=5, minutes=30)))
-            return value
-
-        raise ValueError("Timestamp must be a string or datetime object")
+        """Validates and normalizes timestamp to IST timezone"""
+        return normalize_timestamp(value)  # Use the utility function
 
     @validator('location')
     def validate_location(cls, v):
-        """Validates and rounds location coordinates to 6 decimal places"""
+        """Validates and rounds location coordinates to 5 decimal places"""
         if v is None:
             return v
-        if len(v) != 2:
-            raise ValueError("Location must contain exactly 2 coordinates")
-        return [round(coord, 6) for coord in v]
+        return round_coordinates(v)  # Use the utility function
 
     class Config:
         json_encoders = {
@@ -123,7 +79,7 @@ class LogBase(BaseModel):
                 "train_ref": "67e80645e4a58df990138c2b",
                 "timestamp": "2025-04-10T14:23:05+05:30",
                 "rfid_tag": "RFID_101_B2",
-                "location": [76.8512, 28.7041],
+                "location": [76.85125, 28.70412],
                 "accuracy": "good",
                 "is_test": False
             }
@@ -153,7 +109,7 @@ class LogUpdate(BaseModel):
         min_items=2, 
         max_items=2, 
         description="GPS coordinates as [longitude, latitude]",
-        example=[76.8512, 28.7041]
+        example=[76.85125, 28.70412]
     )
     timestamp: Optional[datetime] = Field(
         None, 
@@ -174,7 +130,7 @@ class LogUpdate(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "location": [76.8512, 28.7041],
+                "location": [76.85125, 28.70412],
                 "accuracy": "good",
                 "is_test": False
             }
@@ -193,7 +149,7 @@ class LogInDB(LogBase):
                 "train_ref": "67e80645e4a58df990138c2b",
                 "timestamp": "2025-04-10T14:23:05+05:30",
                 "rfid_tag": "RFID_101_B2",
-                "location": [76.8512, 28.7041],
+                "location": [76.85125, 28.70412],
                 "accuracy": "good",
                 "is_test": False
             }

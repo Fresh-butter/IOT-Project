@@ -5,21 +5,7 @@ Defines Pydantic models for train data validation and serialization.
 from pydantic import BaseModel, Field
 from bson import ObjectId
 from typing import Optional
-
-class PyObjectId(str):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v):
-        if v is not None and not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return str(v) if v is not None else None
-
-    @classmethod
-    def __modify_schema__(cls, field_schema):
-        field_schema.update(type="string", format="object-id", nullable=True)
+from app.database import PyObjectId  # Use centralized PyObjectId implementation
 
 class TrainBase(BaseModel):
     train_id: str = Field(

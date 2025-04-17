@@ -4,6 +4,7 @@ Defines the structure and operations for route data in MongoDB.
 """
 from bson import ObjectId
 from app.database import get_collection
+from app.utils import round_coordinates
 
 class RouteModel:
     collection = "routes"
@@ -31,6 +32,16 @@ class RouteModel:
         # Convert ObjectId references
         if "assigned_train_ref" in route_data and route_data["assigned_train_ref"]:
             route_data["assigned_train_ref"] = ObjectId(route_data["assigned_train_ref"])
+        
+        # Round coordinates if location is present
+        if "location" in route_data and route_data["location"]:
+            route_data["location"] = round_coordinates(route_data["location"])
+        
+        # Round coordinates in all checkpoints
+        if "checkpoints" in route_data and route_data["checkpoints"]:
+            for checkpoint in route_data["checkpoints"]:
+                if "location" in checkpoint and checkpoint["location"]:
+                    checkpoint["location"] = round_coordinates(checkpoint["location"])
             
         result = await get_collection(RouteModel.collection).insert_one(route_data)
         return str(result.inserted_id)
@@ -63,6 +74,16 @@ class RouteModel:
                 update_data["assigned_train_ref"] = ObjectId(update_data["assigned_train_ref"])
             else:
                 update_data["assigned_train_ref"] = None
+
+        # Round coordinates if location is present
+        if "location" in update_data and update_data["location"]:
+            update_data["location"] = round_coordinates(update_data["location"])
+
+        # Round coordinates in all checkpoints
+        if "checkpoints" in update_data and update_data["checkpoints"]:
+            for checkpoint in update_data["checkpoints"]:
+                if "location" in checkpoint and checkpoint["location"]:
+                    checkpoint["location"] = round_coordinates(checkpoint["location"])
 
         result = await get_collection(RouteModel.collection).update_one(
             {"_id": ObjectId(id)},
