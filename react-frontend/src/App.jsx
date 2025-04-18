@@ -1,21 +1,14 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+import React from 'react';
+import Navbar from './components/Navbar';
+import Dashboard from './components/Dashboard';
 
-function App() {
-    const [message, setMessage] = useState("");
-
-    useEffect(() => {
-        axios.get("https://iot-project-c3wb.onrender.com/")
-            .then(response => setMessage(response.data.message))
-            .catch(error => console.error(error));
-    }, []);
-
-    return (
-        <div>
-            <h1>Train Collision System</h1>
-            <p>Backend says: {message}</p>
-        </div>
-    );
-}
+const App = () => {
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <Navbar />
+      <Dashboard />
+    </div>
+  );
+};
 
 export default App;
