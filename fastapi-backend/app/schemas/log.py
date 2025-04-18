@@ -16,9 +16,13 @@ class AccuracyCategory(str, Enum):
     GOOD = "good"           # 5-10 meter error
     MODERATE = "moderate"   # 10-25 meter error
     POOR = "poor"           # > 25 meter error
+    VERY_POOR = "very_poor" # > 50 meter error
     INVALID = "invalid"     # No GPS fix
 
 class LogBase(BaseModel):
+    """
+    Base model for log entries with common attributes
+    """
     train_id: str = Field(
         ..., 
         description="Unique identifier for the train",
@@ -52,26 +56,27 @@ class LogBase(BaseModel):
         example="good"
     )
     is_test: bool = Field(
-        ..., 
+        False, 
         description="Flag indicating whether this is a test record",
         example=False
     )
 
     @validator("timestamp", pre=True)
-    def normalize_timestamp(cls, value):
+    def validate_timestamp(cls, value):
         """Validates and normalizes timestamp to IST timezone"""
-        return normalize_timestamp(value)  # Use the utility function
+        return normalize_timestamp(value)
 
     @validator('location')
     def validate_location(cls, v):
         """Validates and rounds location coordinates to 5 decimal places"""
         if v is None:
             return v
-        return round_coordinates(v)  # Use the utility function
+        return round_coordinates(v)
 
     class Config:
         json_encoders = {
-            ObjectId: str
+            ObjectId: str,
+            datetime: lambda dt: dt.isoformat()
         }
         schema_extra = {
             "example": {

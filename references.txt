@@ -1,3 +1,64 @@
+Backend Improvement Plan
+
+all the longitude and lattitude data is 5 decimal palces 
+
+Let's improve your backend codebase by making it more consistent, clean, and adding features based on your schema.md reference.
+
+Todo List for Backend Improvement
+Code Consistency and Cleanup
+
+Fix inconsistent code formatting
+Standardize error handling
+Ensure consistent naming conventions
+Fix the GPS accuracy classification in utils.py (align with reference.py)
+Schema Enhancements
+
+Ensure all schemas match the MongoDB schema documentation
+Add missing fields and validation
+Model Improvements
+
+Update model functions to handle all fields in schemas
+Add query methods that would be useful for the application
+Route Improvements
+
+Add missing endpoints
+Standardize response formats
+Add better validation and error handling
+Core Business Logic
+
+Implement collision detection algorithms
+Add train tracking logic
+Create location/GPS + RFID utilities
+Services Layer
+
+Implement train service
+Implement route service
+Implement alert service
+Background Tasks
+
+Add monitoring tasks
+Set up periodic data processing
+API Enhancements
+
+Add simulation endpoints for testing
+Add analytics endpoints
+Recommended Order for Updates
+utils.py - Fix GPS accuracy classification and other utility functions
+database.py - Ensure consistent database access methods
+config.py - Review and update configuration settings
+schemas/ - Update all schema files to match MongoDB documentation
+models/ - Update model files to work with updated schemas
+routes/ - Update route handlers
+core/ - Add new core business logic modules
+services/ - Add new service layer modules
+tasks/ - Add background task modules
+api/ - Add specialized API endpoints
+main.py - Update the main application entry point
+Let me know which file you'd like to start with, and I'll help you make the necessary improvements!
+
+
+Several files will be added later
+
 fastapi-backend/
 ├── app/
 │   ├── core/                 # NEW: Core business logic
@@ -20,3 +81,6 @@ fastapi-backend/
 │   ├── config.py             # Existing configuration
 │   └── main.py               # Existing app entry point
 └── main.py                   # Existing server starter
+
+
+After everyting works we will add users system with authentication

@@ -13,6 +13,11 @@ class Checkpoint(BaseModel):
     """
     Represents a checkpoint in a train route
     """
+    name: Optional[str] = Field(
+        None,
+        description="Name of the station (null if not a station)",
+        example="station_alpha"
+    )
     interval: int = Field(
         ..., 
         ge=0, 
@@ -40,6 +45,7 @@ class Checkpoint(BaseModel):
     class Config:
         schema_extra = {
             "example": {
+                "name": "station_alpha",
                 "interval": 0,
                 "rfid_tag": "RFID_101_A1", 
                 "location": [77.209, 28.6139]
@@ -114,16 +120,19 @@ class RouteBase(BaseModel):
                 "assigned_train_ref": "67e80645e4a58df990138c2b",
                 "checkpoints": [
                     {
+                        "name": None,
                         "interval": 0,
                         "rfid_tag": "RFID_101_A1",
                         "location": [77.209, 28.6139]
                     },
                     {
+                        "name": "station_alpha",
                         "interval": 3600,
                         "rfid_tag": None,
                         "location": [77.1025, 28.7041]
                     },
                     {
+                        "name": None,
                         "interval": 7200,
                         "rfid_tag": "RFID_101_B2",
                         "location": [76.8512, 28.7041]

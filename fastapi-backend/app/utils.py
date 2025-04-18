@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 import re
 from fastapi import HTTPException
 from app.config import IST
+from typing import Optional, List, Dict, Any
 
 def round_coordinates(coordinates, decimal_places=5):
     """
@@ -90,7 +91,7 @@ def handle_exceptions(operation_name, value_error_status=400, general_error_stat
         return wrapper
     return decorator
 
-def classify_gps_accuracy(hdop: float = None, satellites: int = None) -> dict:
+def classify_gps_accuracy(hdop: Optional[float] = None, satellites: Optional[int] = None) -> Dict[str, Any]:
     """
     Classify GPS accuracy based on HDOP and satellite count
     
@@ -103,38 +104,70 @@ def classify_gps_accuracy(hdop: float = None, satellites: int = None) -> dict:
     """
     if hdop is None or satellites is None or satellites == 0:
         return {
-            "category": "invalid",
+            "category": "Invalid",
             "description": "No GPS fix",
             "error_m": None
         }
 
     if hdop <= 1.0 and satellites >= 6:
         return {
-            "category": "excellent",
+            "category": "Excellent",
             "description": "< 5 meter error",
             "error_m": "<5"
         }
     elif 1.0 < hdop <= 2.0 and satellites >= 5:
         return {
-            "category": "good",
+            "category": "Good",
             "description": "5–10 meter error",
             "error_m": "5–10"
         }
     elif 2.0 < hdop <= 5.0 and satellites >= 4:
         return {
-            "category": "moderate",
+            "category": "Moderate",
             "description": "10–25 meter error",
             "error_m": "10–25"
         }
     elif 5.0 < hdop <= 10.0 and satellites >= 3:
         return {
-            "category": "poor",
+            "category": "Poor",
             "description": "25–50 meter error",
             "error_m": "25–50"
         }
     else:
         return {
-            "category": "invalid",
+            "category": "Very Poor or Invalid",
             "description": "> 50 meter error or no fix",
             "error_m": ">50"
         }
+
+def calculate_distance(point1: List[float], point2: List[float]) -> float:
+    """
+    Calculate the Haversine distance between two GPS coordinates in meters
+    
+    Args:
+        point1: List containing [longitude, latitude]
+        point2: List containing [longitude, latitude]
+        
+    Returns:
+        float: Distance in meters
+    """
+    from math import radians, sin, cos, sqrt, atan2
+    
+    # Earth radius in meters
+    R = 6371000
+    
+    # Extract coordinates
+    lon1, lat1 = point1
+    lon2, lat2 = point2
+    
+    # Convert to radians
+    phi1 = radians(lat1)
+    phi2 = radians(lat2)
+    delta_phi = radians(lat2 - lat1)
+    delta_lambda = radians(lon2 - lon1)
+    
+    # Haversine formula
+    a = sin(delta_phi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(delta_lambda / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    
+    return R * c
