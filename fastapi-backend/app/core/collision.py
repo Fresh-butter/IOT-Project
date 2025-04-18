@@ -92,56 +92,6 @@ async def check_collision_risk(train_id1: str, train_id2: str) -> Dict[str, Any]
     
     return result
 
-async def check_segment_collision(train_id: str, segment_start: List[float], 
-                                 segment_end: List[float], 
-                                 max_distance: float = 100.0) -> Dict[str, Any]:
-    """
-    Check if a train is at risk of collision with a track segment
-    
-    Args:
-        train_id: Train identifier
-        segment_start: Starting point of the segment [longitude, latitude]
-        segment_end: Ending point of the segment [longitude, latitude]
-        max_distance: Maximum distance in meters to consider at risk
-        
-    Returns:
-        Dict: Collision risk assessment
-    """
-    # Get the latest log for the train
-    latest_log = await LogModel.get_latest_by_train(train_id)
-    
-    # Default response
-    result = {
-        "train_id": train_id,
-        "collision_risk": "none",
-        "distance": None,
-        "location": None,
-        "timestamp": get_current_ist_time()
-    }
-    
-    # Check if we have valid location data for the train
-    if not latest_log or not latest_log.get("location"):
-        return result
-    
-    # Check if train is near the track segment
-    near_segment = is_point_near_line(
-        latest_log["location"], 
-        segment_start, 
-        segment_end, 
-        max_distance
-    )
-    
-    if near_segment:
-        result["collision_risk"] = "warning"
-        result["location"] = latest_log["location"]
-        
-        # Estimate distance (simplified as we already know it's within max_distance)
-        d_to_start = calculate_distance(latest_log["location"], segment_start)
-        d_to_end = calculate_distance(latest_log["location"], segment_end)
-        result["distance"] = min(d_to_start, d_to_end)
-    
-    return result
-
 async def check_all_train_collisions() -> List[Dict[str, Any]]:
     """
     Check collision risks between all active trains
@@ -226,6 +176,8 @@ async def analyze_route_collision_risks(route_id: str) -> List[Dict[str, Any]]:
     Returns:
         List[Dict]: List of identified risk points
     """
+    from app.core.tracking import detect_route_deviations
+    
     route = await RouteModel.get_by_route_id(route_id)
     if not route or not route.get("checkpoints") or len(route["checkpoints"]) < 2:
         return []
@@ -237,22 +189,42 @@ async def analyze_route_collision_risks(route_id: str) -> List[Dict[str, Any]]:
     other_active_trains = [t for t in active_trains if t["train_id"] != assigned_train_id]
     risk_points = []
     
-    # Check each segment of the route for potential collisions
-    checkpoints = route["checkpoints"]
-    for i in range(len(checkpoints) - 1):
-        segment_start = checkpoints[i]["location"]
-        segment_end = checkpoints[i+1]["location"]
-        
-        for train in other_active_trains:
-            risk = await check_segment_collision(
-                train["train_id"], 
-                segment_start, 
-                segment_end
-            )
+    # For each other active train, check if it's crossing our route
+    for train in other_active_trains:
+        # Use the route deviation detection with this route's segments
+        for i in range(len(route["checkpoints"]) - 1):
+            segment_start = route["checkpoints"][i]["location"]
+            segment_end = route["checkpoints"][i+1]["location"]
             
-            if risk["collision_risk"] != "none":
-                risk["route_id"] = route_id
-                risk["segment"] = [i, i+1]
-                risk_points.append(risk)
+            # Check if train might cross this segment
+            train_position = await get_train_position(train["train_id"])
+            
+            if train_position.get("location"):
+                # Check if train is near this segment
+                near_segment = is_point_near_line(
+                    train_position["location"],
+                    segment_start,
+                    segment_end,
+                    max_distance=100.0
+                )
+                
+                if near_segment:
+                    risk = {
+                        "train_id": train["train_id"],
+                        "route_id": route_id,
+                        "segment": [i, i+1],
+                        "collision_risk": "warning",
+                        "location": train_position["location"],
+                        "timestamp": get_current_ist_time()
+                    }
+                    
+                    # Calculate approximate distance
+                    risk["distance"] = min_distance_point_to_line(
+                        train_position["location"],
+                        segment_start,
+                        segment_end
+                    )
+                    
+                    risk_points.append(risk)
     
     return risk_points

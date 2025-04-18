@@ -265,3 +265,167 @@ async def get_active_trains_locations() -> List[Dict[str, Any]]:
             results.append(train_info)
     
     return results
+
+async def detect_route_deviations(train_id: str, distance_threshold: float = 100.0) -> Dict[str, Any]:
+    """
+    Detect if a train has deviated from its assigned route
+    
+    Args:
+        train_id: Train identifier
+        distance_threshold: Maximum allowable distance from route in meters
+        
+    Returns:
+        Dict: Assessment of route deviation with details
+    """
+    # Get train details
+    train = await TrainModel.get_by_train_id(train_id)
+    
+    result = {
+        "train_id": train_id,
+        "deviation_detected": False,
+        "distance_from_route": None,
+        "location": None,
+        "timestamp": get_current_ist_time(),
+        "nearest_checkpoint": None,
+        "expected_segment": None,
+        "severity": "none"
+    }
+    
+    if not train or not train.get("current_route_id"):
+        return result
+    
+    # Get the latest log for the train
+    latest_log = await LogModel.get_latest_by_train(train_id)
+    if not latest_log or not latest_log.get("location"):
+        return result
+    
+    # Get route details
+    route = await RouteModel.get_by_route_id(train["current_route_id"])
+    if not route or not route.get("checkpoints") or len(route["checkpoints"]) < 2:
+        return result
+    
+    # Find nearest checkpoint and get expected segment
+    nearest_cp, cp_idx = await find_nearest_checkpoint(
+        latest_log["location"], 
+        train["current_route_id"]
+    )
+    
+    result["nearest_checkpoint"] = nearest_cp
+    
+    # Determine which segment the train should be on
+    if cp_idx == -1:
+        return result
+    
+    # Check if train is at the end of the route
+    if cp_idx == len(route["checkpoints"]) - 1:
+        # No next segment, so no deviation possible
+        return result
+    
+    # Get the current segment the train should be on
+    segment_start = route["checkpoints"][cp_idx]["location"]
+    segment_end = route["checkpoints"][cp_idx + 1]["location"]
+    
+    result["expected_segment"] = [cp_idx, cp_idx + 1]
+    
+    # Check if the train is near this segment
+    near_segment = is_point_near_line(
+        latest_log["location"],
+        segment_start,
+        segment_end,
+        distance_threshold
+    )
+    
+    if not near_segment:
+        # Train has deviated from its route
+        result["deviation_detected"] = True
+        
+        # Calculate minimum distance to the expected segment
+        min_distance = float('inf')
+        
+        # Check distance to current segment
+        d_point_to_line = min_distance_point_to_line(
+            latest_log["location"],
+            segment_start,
+            segment_end
+        )
+        
+        min_distance = min(min_distance, d_point_to_line)
+        
+        # Also check adjacent segments in case train is between segments
+        if cp_idx > 0:
+            prev_segment_start = route["checkpoints"][cp_idx - 1]["location"]
+            prev_segment_end = segment_start
+            
+            d_point_to_prev = min_distance_point_to_line(
+                latest_log["location"],
+                prev_segment_start,
+                prev_segment_end
+            )
+            
+            min_distance = min(min_distance, d_point_to_prev)
+            
+        if cp_idx + 2 < len(route["checkpoints"]):
+            next_segment_start = segment_end
+            next_segment_end = route["checkpoints"][cp_idx + 2]["location"]
+            
+            d_point_to_next = min_distance_point_to_line(
+                latest_log["location"],
+                next_segment_start,
+                next_segment_end
+            )
+            
+            min_distance = min(min_distance, d_point_to_next)
+        
+        result["distance_from_route"] = min_distance
+        result["location"] = latest_log["location"]
+        
+        # Determine severity based on distance
+        if min_distance > 3 * distance_threshold:
+            result["severity"] = "critical"
+        elif min_distance > 2 * distance_threshold:
+            result["severity"] = "high"
+        else:
+            result["severity"] = "moderate"
+    
+    return result
+
+def min_distance_point_to_line(point: List[float], line_start: List[float], line_end: List[float]) -> float:
+    """
+    Calculate the minimum distance from a point to a line segment
+    
+    Args:
+        point: The point to check [longitude, latitude]
+        line_start: Starting point of the line segment [longitude, latitude]
+        line_end: Ending point of the line segment [longitude, latitude]
+        
+    Returns:
+        float: Minimum distance in meters from point to line segment
+    """
+    # Calculate distances
+    d_point_to_start = calculate_distance(point, line_start)
+    d_point_to_end = calculate_distance(point, line_end)
+    d_start_to_end = calculate_distance(line_start, line_end)
+    
+    # Handle case where line segment is very short
+    if d_start_to_end < 1.0:
+        return d_point_to_start
+    
+    # Calculate the projection of the point onto the line segment
+    # using vector math to find the closest point on the line
+    t = ((point[0] - line_start[0]) * (line_end[0] - line_start[0]) + 
+         (point[1] - line_start[1]) * (line_end[1] - line_start[1])) / (d_start_to_end ** 2)
+    
+    # If t is outside [0,1], the closest point is one of the endpoints
+    if t < 0:
+        return d_point_to_start
+    if t > 1:
+        return d_point_to_end
+    
+    # Calculate the closest point on the line segment
+    closest_point = [
+        line_start[0] + t * (line_end[0] - line_start[0]),
+        line_start[1] + t * (line_end[1] - line_start[1])
+    ]
+    
+    # Calculate distance from the point to the closest point on the line
+    return calculate_distance(point, closest_point)

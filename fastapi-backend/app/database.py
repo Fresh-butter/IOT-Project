@@ -3,11 +3,12 @@ Database connection module.
 Handles connection to MongoDB Atlas and provides database access functions.
 """
 import logging
-from typing import Any, Dict, List, Optional, Union, Type, TypeVar
+from typing import Any, Dict, List, Optional, Union, Type, TypeVar, Callable, Awaitable
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase, AsyncIOMotorCollection
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, PyMongoError
 from pymongo import IndexModel, ASCENDING, DESCENDING
+from fastapi import HTTPException
 from app.config import MONGODB_URL, DB_NAME
 
 # Type variable for return types
@@ -172,23 +173,20 @@ class PyObjectId(str):
         # Add this method for OpenAPI documentation
         field_schema.update(type="string", format="object-id", example="5f50eb588287d07746b6f8d4")
 
-async def safe_db_operation(operation, error_message: str, *args, **kwargs) -> Any:
+async def safe_db_operation(operation: Callable[[], Awaitable[Any]], error_message: str) -> Any:
     """
-    Safely execute a database operation with proper error handling.
+    Execute a database operation safely with error handling
     
     Args:
-        operation: Async function that performs a database operation
-        error_message: Message to log if operation fails
-        *args, **kwargs: Arguments to pass to the operation function
+        operation: The database operation function to execute (as a lambda or callable)
+        error_message: Error message to display if operation fails
         
     Returns:
-        Result of the database operation
-        
-    Raises:
-        PyMongoError: If database operation fails
+        The result of the database operation
     """
     try:
-        return await operation(*args, **kwargs)
-    except PyMongoError as e:
-        logging.error(f"{error_message}: {str(e)}")
-        raise
+        return await operation()
+    except Exception as e:
+        # Optionally log the error
+        logging.error(f"Database operation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"{error_message}: {str(e)}")

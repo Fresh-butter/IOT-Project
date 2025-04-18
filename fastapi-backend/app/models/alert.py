@@ -2,11 +2,14 @@
 Alert model module.
 Defines the structure and operations for alert data in MongoDB.
 """
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from bson import ObjectId
 from datetime import datetime
-from app.database import get_collection
-from app.config import get_current_ist_time
+import datetime as dt
+import logging
+
+from app.database import get_collection, safe_db_operation, PyObjectId
+from app.config import get_current_ist_time, SYSTEM_SENDER_ID, GUEST_RECIPIENT_ID
 from app.utils import round_coordinates
 
 class AlertModel:
@@ -14,38 +17,39 @@ class AlertModel:
     
     @staticmethod
     async def get_all(limit: int = 1000, skip: int = 0, filter_param=None):
-        """
-        Get all alerts with pagination and optional filtering
+        """Get all alerts with optional filtering"""
+        async def operation():
+            filter_dict = filter_param or {}
+            alerts = await get_collection(AlertModel.collection).find(
+                filter_dict
+            ).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
+            
+            # Convert ObjectIds to strings
+            for alert in alerts:
+                alert["_id"] = str(alert["_id"])
+                if isinstance(alert.get("sender_ref"), ObjectId):
+                    alert["sender_ref"] = str(alert["sender_ref"])
+                if isinstance(alert.get("recipient_ref"), ObjectId):
+                    alert["recipient_ref"] = str(alert["recipient_ref"])
+                    
+            return alerts
         
-        Args:
-            limit: Maximum number of alerts to return
-            skip: Number of alerts to skip
-            filter_param: Optional filter parameter
-            
-        Returns:
-            list: List of alerts sorted by timestamp (newest first)
-        """
-        filter_query = {}
-        if filter_param is not None:
-            filter_query["field_name"] = filter_param
-            
-        alerts = await get_collection(AlertModel.collection).find(filter_query).sort(
-            "timestamp", -1
-        ).skip(skip).limit(limit).to_list(limit)
-        return alerts
+        return await safe_db_operation(operation, "Error retrieving alerts")
     
     @staticmethod
     async def get_by_id(id: str):
-        """
-        Get alert by ID
+        """Get an alert by ID"""
+        async def operation():
+            alert = await get_collection(AlertModel.collection).find_one({"_id": ObjectId(id)})
+            if alert:
+                alert["_id"] = str(alert["_id"])
+                if isinstance(alert.get("sender_ref"), ObjectId):
+                    alert["sender_ref"] = str(alert["sender_ref"])
+                if isinstance(alert.get("recipient_ref"), ObjectId):
+                    alert["recipient_ref"] = str(alert["recipient_ref"])
+            return alert
         
-        Args:
-            id: Alert document ID
-            
-        Returns:
-            dict: Alert document or None if not found
-        """
-        return await get_collection(AlertModel.collection).find_one({"_id": ObjectId(id)})
+        return await safe_db_operation(operation, "Error retrieving alert by ID")
     
     @staticmethod
     async def get_by_recipient(recipient_id: str):
@@ -58,54 +62,124 @@ class AlertModel:
         Returns:
             list: List of alert documents
         """
-        alerts = await get_collection(AlertModel.collection).find(
-            {"recipient_ref": ObjectId(recipient_id)}
-        ).to_list(1000)
-        return alerts
+        async def operation():
+            try:
+                recipient_obj_id = ObjectId(recipient_id)
+                filter_dict = {"recipient_ref": recipient_obj_id}
+            except:
+                # If conversion fails, try string match
+                filter_dict = {"recipient_ref": recipient_id}
+                
+            alerts = await get_collection(AlertModel.collection).find(
+                filter_dict
+            ).sort("timestamp", -1).to_list(1000)
+            
+            # Convert ObjectIds to strings
+            for alert in alerts:
+                alert["_id"] = str(alert["_id"])
+                if isinstance(alert.get("sender_ref"), ObjectId):
+                    alert["sender_ref"] = str(alert["sender_ref"])
+                if isinstance(alert.get("recipient_ref"), ObjectId):
+                    alert["recipient_ref"] = str(alert["recipient_ref"])
+                    
+            return alerts
+        
+        return await safe_db_operation(operation, "Error retrieving alerts by recipient")
     
     @staticmethod
-    async def create(alert_data: dict):
-        """Create a new alert"""
-        # Ensure timestamp is set if not provided
-        if "timestamp" not in alert_data:
-            alert_data["timestamp"] = get_current_ist_time()
-            
-        # Convert string IDs to ObjectIds
-        if "sender_ref" in alert_data and isinstance(alert_data["sender_ref"], str):
-            alert_data["sender_ref"] = ObjectId(alert_data["sender_ref"])
-        if "recipient_ref" in alert_data and isinstance(alert_data["recipient_ref"], str):
-            alert_data["recipient_ref"] = ObjectId(alert_data["recipient_ref"])
+    async def create(alert_data: dict, create_guest_copy: bool = True):
+        """
+        Create a new alert
         
-        # Round coordinates if location is present
-        if "location" in alert_data and alert_data["location"]:
-            alert_data["location"] = round_coordinates(alert_data["location"])
+        Args:
+            alert_data: Alert data
+            create_guest_copy: Whether to create a copy for the guest account
+        """
+        async def operation():
+            # Ensure timestamp is set if not provided
+            if "timestamp" not in alert_data:
+                alert_data["timestamp"] = get_current_ist_time()
+                
+            # Handle ID conversions if needed
+            if "sender_ref" in alert_data and isinstance(alert_data["sender_ref"], str):
+                try:
+                    alert_data["sender_ref"] = ObjectId(alert_data["sender_ref"])
+                except:
+                    # Keep as string if it's not a valid ObjectId
+                    pass
+                    
+            if "recipient_ref" in alert_data and isinstance(alert_data["recipient_ref"], str):
+                try:
+                    alert_data["recipient_ref"] = ObjectId(alert_data["recipient_ref"])
+                except:
+                    # Keep as string if it's not a valid ObjectId
+                    pass
             
-        result = await get_collection(AlertModel.collection).insert_one(alert_data)
-        return str(result.inserted_id)
+            # Round coordinates if location is present
+            if "location" in alert_data and alert_data["location"]:
+                alert_data["location"] = round_coordinates(alert_data["location"])
+                
+            # Create the alert
+            result = await get_collection(AlertModel.collection).insert_one(alert_data)
+            alert_id = str(result.inserted_id)
+            
+            # Create duplicate alert for guest account if requested and this isn't already for the guest
+            if create_guest_copy and str(alert_data.get("recipient_ref")) != GUEST_RECIPIENT_ID:
+                try:
+                    guest_alert = alert_data.copy()
+                    guest_alert["recipient_ref"] = GUEST_RECIPIENT_ID
+                    guest_alert["_id"] = ObjectId()  # New ObjectId to avoid duplicate key error
+                    await get_collection(AlertModel.collection).insert_one(guest_alert)
+                except Exception as e:
+                    # Log error but don't fail the whole operation
+                    logging.error(f"Failed to create guest alert: {str(e)}")
+            
+            return alert_id
+        
+        return await safe_db_operation(operation, "Error creating alert")
     
     @staticmethod
     async def update(id: str, alert_data: dict):
         """Update an alert"""
-        # Convert string IDs to ObjectIds
-        if "sender_ref" in alert_data and isinstance(alert_data["sender_ref"], str):
-            alert_data["sender_ref"] = ObjectId(alert_data["sender_ref"])
-        if "recipient_ref" in alert_data and isinstance(alert_data["recipient_ref"], str):
-            alert_data["recipient_ref"] = ObjectId(alert_data["recipient_ref"])
-        
-        # Round coordinates if location is present
-        if "location" in alert_data and alert_data["location"]:
-            alert_data["location"] = round_coordinates(alert_data["location"])
+        async def operation():
+            # Convert string IDs to ObjectIds if needed
+            if "sender_ref" in alert_data and isinstance(alert_data["sender_ref"], str):
+                try:
+                    alert_data["sender_ref"] = ObjectId(alert_data["sender_ref"])
+                except:
+                    # Keep as string if it's not a valid ObjectId
+                    pass
+                    
+            if "recipient_ref" in alert_data and isinstance(alert_data["recipient_ref"], str):
+                try:
+                    alert_data["recipient_ref"] = ObjectId(alert_data["recipient_ref"])
+                except:
+                    # Keep as string if it's not a valid ObjectId
+                    pass
             
-        result = await get_collection(AlertModel.collection).update_one(
-            {"_id": ObjectId(id)}, {"$set": alert_data}
-        )
-        return result.modified_count > 0
+            # Round coordinates if location is present
+            if "location" in alert_data and alert_data["location"]:
+                alert_data["location"] = round_coordinates(alert_data["location"])
+                
+            # Update the alert
+            result = await get_collection(AlertModel.collection).update_one(
+                {"_id": ObjectId(id)}, {"$set": alert_data}
+            )
+            
+            if result.modified_count > 0:
+                return await AlertModel.get_by_id(id)
+            return None
+        
+        return await safe_db_operation(operation, "Error updating alert")
     
     @staticmethod
     async def delete(id: str):
         """Delete an alert"""
-        result = await get_collection(AlertModel.collection).delete_one({"_id": ObjectId(id)})
-        return result.deleted_count > 0
+        async def operation():
+            result = await get_collection(AlertModel.collection).delete_one({"_id": ObjectId(id)})
+            return result.deleted_count > 0
+        
+        return await safe_db_operation(operation, "Error deleting alert")
     
     @staticmethod
     async def get_by_sender(sender_id: str, limit: int = 100):
@@ -119,10 +193,29 @@ class AlertModel:
         Returns:
             list: List of alert documents
         """
-        alerts = await get_collection(AlertModel.collection).find(
-            {"sender_ref": ObjectId(sender_id)}
-        ).sort("timestamp", -1).limit(limit).to_list(limit)
-        return alerts
+        async def operation():
+            try:
+                sender_obj_id = ObjectId(sender_id)
+                filter_dict = {"sender_ref": sender_obj_id}
+            except:
+                # If conversion fails, try string match
+                filter_dict = {"sender_ref": sender_id}
+                
+            alerts = await get_collection(AlertModel.collection).find(
+                filter_dict
+            ).sort("timestamp", -1).limit(limit).to_list(limit)
+            
+            # Convert ObjectIds to strings
+            for alert in alerts:
+                alert["_id"] = str(alert["_id"])
+                if isinstance(alert.get("sender_ref"), ObjectId):
+                    alert["sender_ref"] = str(alert["sender_ref"])
+                if isinstance(alert.get("recipient_ref"), ObjectId):
+                    alert["recipient_ref"] = str(alert["recipient_ref"])
+                    
+            return alerts
+        
+        return await safe_db_operation(operation, "Error retrieving alerts by sender")
     
     @staticmethod
     async def get_recent_alerts(hours: int = 24):
@@ -135,8 +228,20 @@ class AlertModel:
         Returns:
             list: List of recent alert documents
         """
-        time_threshold = get_current_ist_time() - datetime.timedelta(hours=hours)
-        alerts = await get_collection(AlertModel.collection).find(
-            {"timestamp": {"$gte": time_threshold}}
-        ).sort("timestamp", -1).to_list(1000)
-        return alerts
+        async def operation():
+            time_threshold = get_current_ist_time() - dt.timedelta(hours=hours)
+            alerts = await get_collection(AlertModel.collection).find(
+                {"timestamp": {"$gte": time_threshold}}
+            ).sort("timestamp", -1).to_list(1000)
+            
+            # Convert ObjectIds to strings
+            for alert in alerts:
+                alert["_id"] = str(alert["_id"])
+                if isinstance(alert.get("sender_ref"), ObjectId):
+                    alert["sender_ref"] = str(alert["sender_ref"])
+                if isinstance(alert.get("recipient_ref"), ObjectId):
+                    alert["recipient_ref"] = str(alert["recipient_ref"])
+                    
+            return alerts
+        
+        return await safe_db_operation(operation, "Error retrieving recent alerts")

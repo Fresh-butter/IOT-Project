@@ -184,7 +184,7 @@ class RouteModel:
         Assign a train to a route
         
         Args:
-            route_id: Route document ID
+            route_id: Route identifier (like "R301")
             train_id: Train identifier
             train_ref: MongoDB ObjectId of the train document
             
@@ -192,7 +192,7 @@ class RouteModel:
             bool: True if train was assigned successfully, False otherwise
         """
         result = await get_collection(RouteModel.collection).update_one(
-            {"_id": ObjectId(route_id)},
+            {"route_id": route_id},  # Query by route_id field, not _id
             {
                 "$set": {
                     "assigned_train_id": train_id,

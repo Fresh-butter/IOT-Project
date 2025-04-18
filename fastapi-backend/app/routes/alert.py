@@ -1,147 +1,123 @@
 """
 Alert routes module.
-Defines API endpoints for alert operations.
+Defines API endpoints for alert management.
 """
-from fastapi import APIRouter, HTTPException, status, Body, Path, Query, Depends
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
-from bson import ObjectId
+from typing import List
+from fastapi import APIRouter, Body, Path, Query, status
 
-from app.models.alert import AlertModel
-from app.schemas.alert import AlertCreate, AlertUpdate, AlertInDB
-from app.config import get_current_ist_time, SYSTEM_SENDER_ID
+from ..models.alert import AlertModel
+from ..schemas.alert import AlertCreate, AlertUpdate, AlertInDB, AlertSummary
 from app.utils import handle_exceptions
+from ..services.alert_service import AlertService
+from ..config import SYSTEM_SENDER_ID
 
-router = APIRouter()
+router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
 @router.get("/", 
            response_model=List[AlertInDB],
            summary="Get all alerts",
-           description="Retrieve a list of all alerts in the system with pagination")
-@handle_exceptions("fetching alerts")
-async def get_alerts(
-    limit: Optional[int] = Query(100, ge=1, le=1000, description="Limit the number of results returned"),
-    skip: Optional[int] = Query(0, ge=0, description="Number of results to skip")
+           description="Retrieve a list of all alerts in the system")
+@handle_exceptions("retrieving alerts")
+async def get_all_alerts(
+    limit: int = Query(100, ge=1, description="Limit the number of results"),
+    skip: int = Query(0, ge=0, description="Skip the first N results")
 ):
-    """Get all alerts with pagination"""
+    """Get all alerts"""
     alerts = await AlertModel.get_all(limit=limit, skip=skip)
-    return [AlertInDB(**alert) for alert in alerts]
+    return alerts
 
-@router.get("/{id}", 
+@router.get("/{alert_id}", 
            response_model=AlertInDB,
            summary="Get alert by ID",
-           description="Retrieve a specific alert by its unique identifier")
-@handle_exceptions("fetching alert")
+           description="Retrieve a specific alert by its ID")
+@handle_exceptions("retrieving alert")
 async def get_alert(
-    id: str = Path(..., description="The ID of the alert to retrieve")
+    alert_id: str = Path(..., description="The ID of the alert to retrieve")
 ):
-    """Get an alert by ID"""
-    alert = await AlertModel.get_by_id(id)
-    if not alert:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
-                          detail="Alert not found")
-    return AlertInDB(**alert)
+    """Get alert by ID"""
+    alert = await AlertModel.get_by_id(alert_id)
+    return alert
 
-@router.get("/recipient/{recipient_id}", 
+@router.get("/recipient/{recipient_ref}", 
            response_model=List[AlertInDB],
            summary="Get alerts by recipient",
-           description="Retrieve all alerts for a specific recipient train")
-@handle_exceptions("fetching alerts by recipient")
+           description="Retrieve all alerts for a specific recipient")
+@handle_exceptions("retrieving alerts by recipient")
 async def get_alerts_by_recipient(
-    recipient_id: str = Path(..., description="The ID of the train that receives the alerts")
+    recipient_ref: str = Path(..., description="The reference ID of the recipient")
 ):
-    """Get alerts by recipient ID"""
-    alerts = await AlertModel.get_by_recipient(recipient_id)
-    return [AlertInDB(**alert) for alert in alerts]
+    """Get alerts by recipient reference"""
+    alerts = await AlertModel.get_by_recipient(recipient_ref)
+    return alerts
 
-@router.get("/sender/{sender_id}", 
+@router.get("/sender/{sender_ref}", 
            response_model=List[AlertInDB],
            summary="Get alerts by sender",
-           description="Retrieve alerts sent by a specific train or the system")
-@handle_exceptions("fetching alerts by sender")
+           description="Retrieve all alerts from a specific sender")
+@handle_exceptions("retrieving alerts by sender")
 async def get_alerts_by_sender(
-    sender_id: str = Path(..., description="The ID of the train or system that sent the alerts"),
-    limit: Optional[int] = Query(100, ge=1, le=500, description="Maximum number of alerts to return")
+    sender_ref: str = Path(..., description="The reference ID of the sender"),
+    limit: int = Query(100, ge=1, description="Limit the number of results")
 ):
-    """Get alerts by sender ID"""
-    alerts = await AlertModel.get_by_sender(sender_id, limit)
-    return [AlertInDB(**alert) for alert in alerts]
-
-@router.get("/recent/{hours}", 
-           response_model=List[AlertInDB],
-           summary="Get recent alerts",
-           description="Retrieve alerts from the last N hours")
-@handle_exceptions("fetching recent alerts")
-async def get_recent_alerts(
-    hours: int = Path(..., ge=1, le=72, description="Number of hours to look back")
-):
-    """Get alerts from the last N hours"""
-    alerts = await AlertModel.get_recent_alerts(hours)
-    return [AlertInDB(**alert) for alert in alerts]
+    """Get alerts by sender reference"""
+    alerts = await AlertModel.get_by_sender(sender_ref, limit=limit)
+    return alerts
 
 @router.post("/", 
-            response_model=AlertInDB, 
+            response_model=AlertInDB,
             status_code=status.HTTP_201_CREATED,
             summary="Create a new alert",
-            description="Create a new alert to be sent between trains")
+            description="Create a new alert with the provided information")
 @handle_exceptions("creating alert")
 async def create_alert(
-    alert: AlertCreate = Body(..., description="The alert data to create")
+    alert: AlertCreate = Body(...)
 ):
     """Create a new alert"""
-    alert_dict = alert.dict()
-    # Set current time if not provided
-    if "timestamp" not in alert_dict or alert_dict["timestamp"] is None:
-        alert_dict["timestamp"] = get_current_ist_time()
+    alert_data = alert.dict()
+    
+    # Ensure system-generated alerts use the correct sender_ref
+    if alert_data.get("sender_ref") == "SYSTEM":
+        alert_data["sender_ref"] = SYSTEM_SENDER_ID
         
-    # If sender_ref is not provided, use system sender ID
-    if "sender_ref" not in alert_dict or alert_dict["sender_ref"] is None:
-        alert_dict["sender_ref"] = SYSTEM_SENDER_ID
-        
-    alert_id = await AlertModel.create(alert_dict)
+    # Set create_guest_copy=False for API-created alerts
+    alert_id = await AlertModel.create(alert_data, create_guest_copy=False)
     created_alert = await AlertModel.get_by_id(alert_id)
-    if not created_alert:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                          detail="Failed to retrieve created alert")
-    return AlertInDB(**created_alert)
+    return created_alert
 
-@router.put("/{id}", 
+@router.put("/{alert_id}", 
            response_model=AlertInDB,
            summary="Update an alert",
-           description="Update the properties of an existing alert")
+           description="Update an existing alert with the provided information")
 @handle_exceptions("updating alert")
 async def update_alert(
-    id: str = Path(..., description="The ID of the alert to update"),
-    alert: AlertUpdate = Body(..., description="The updated alert data")
+    alert_id: str = Path(..., description="The ID of the alert to update"),
+    alert_update: AlertUpdate = Body(...)
 ):
     """Update an alert"""
-    # Filter out None values
-    alert_data = {k: v for k, v in alert.dict().items() if v is not None}
-    
-    if not alert_data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 
-                          detail="No valid update data provided")
-    
-    updated = await AlertModel.update(id, alert_data)
-    if not updated:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
-                          detail="Alert not found")
-    
-    updated_alert = await AlertModel.get_by_id(id)
-    return AlertInDB(**updated_alert)
+    update_data = alert_update.dict(exclude_unset=True)
+    updated_alert = await AlertModel.update(alert_id, update_data)
+    return updated_alert
 
-@router.delete("/{id}", 
-              response_model=Dict[str, str],
+@router.delete("/{alert_id}", 
+              status_code=status.HTTP_204_NO_CONTENT,
               summary="Delete an alert",
-              description="Remove an alert from the system")
+              description="Delete an alert by its ID")
 @handle_exceptions("deleting alert")
 async def delete_alert(
-    id: str = Path(..., description="The ID of the alert to delete")
+    alert_id: str = Path(..., description="The ID of the alert to delete")
 ):
     """Delete an alert"""
-    deleted = await AlertModel.delete(id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
-                          detail="Alert not found")
-    
-    return {"message": "Alert deleted successfully"}
+    await AlertModel.delete(alert_id)
+    return None
+#I don't need this request
+# @router.get("/summary/recent", 
+#            response_model=AlertSummary,
+#            summary="Get alert summary",
+#            description="Get summary statistics for recent alerts")
+# @handle_exceptions("generating alert summary")
+# async def get_alert_summary(
+#     hours: int = Query(24, ge=1, le=168, description="Number of hours to look back")
+# ):
+#     """Get summary of recent alerts"""
+#     summary = await AlertService.generate_alert_summary(hours)
+#     return summary

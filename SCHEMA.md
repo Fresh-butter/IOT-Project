@@ -57,7 +57,7 @@
 - `assigned_train_id` and `assigned_train_ref` can be null if no train has been assigned
 - `start_time` can be `null`. In that case, the actual start time is whenever the train starts running on the route.
 - `checkpoints` is an array of locations the train is expected to reach.
-- `interval` (in **seconds**) represents expected time since last checkpoint to pass the current checkpoint.
+- `interval` (in **seconds**) represents expected time to pass the checkpoint from start time
   
 - `rfid_tag` can be `null` if no RFID scan is expected at that checkpoint.
 - `name`, if **null**, the checkpoint is not a station. If a string, the checkpoint is a station with a human-readable name.
@@ -106,4 +106,4 @@
 
 ### Alert System Notes
 - System-generated alerts use a default sender_ref: "680142a4f8db812a8b87617c"
-- Every alert is sent both to the intended recipient train and to a "guest" account with recipient_ref: "680142cff8db812a8b87617d"
+- Every alert by system is sent to both the intended recipient train and to a "guest" account with recipient_ref: "680142cff8db812a8b87617d"

@@ -5,23 +5,38 @@ Defines API endpoints for log operations.
 from fastapi import APIRouter, HTTPException, status, Body, Path, Query, Depends
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+
 from app.models.log import LogModel
+from app.models.train import TrainModel
 from app.schemas.log import LogCreate, LogUpdate, LogInDB
-from app.config import get_current_ist_time
 from app.utils import handle_exceptions
+from app.database import safe_db_operation
+from app.config import get_current_ist_time
 
 router = APIRouter()
 
 @router.post("/", 
-             response_model=LogInDB, 
-             status_code=status.HTTP_201_CREATED,
-             summary="Create a new log entry",
-             description="Create a new log entry for a train")
+            response_model=LogInDB, 
+            status_code=status.HTTP_201_CREATED,
+            summary="Create a new log entry",
+            description="Create a new log entry for a train event")
 @handle_exceptions("creating log")
-async def create_log(log: LogCreate = Body(...)):
+async def create_log(
+    log: LogCreate = Body(..., description="The log data to create")
+):
     """Create a new log entry"""
+    # Check if the train exists
+    train = await TrainModel.get_by_train_id(log.train_id)
+    if not train:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
+                          detail=f"Train with ID {log.train_id} not found")
+    
+    # Set train_ref if not provided
     log_dict = log.dict()
-    # Set current time if not provided
+    if "train_ref" not in log_dict or log_dict["train_ref"] is None:
+        log_dict["train_ref"] = str(train["_id"])
+    
+    # Set timestamp if not provided
     if "timestamp" not in log_dict or log_dict["timestamp"] is None:
         log_dict["timestamp"] = get_current_ist_time()
         
@@ -57,28 +72,28 @@ async def update_log(
     return LogInDB(**updated_log)
 
 @router.get("/", 
-            response_model=List[LogInDB],
-            summary="Get all logs",
-            description="Retrieve all logs with pagination and optional filtering")
-@handle_exceptions("fetching logs")
+           response_model=List[LogInDB],
+           summary="Get all logs",
+           description="Retrieve a list of all logs with pagination")
+@handle_exceptions("retrieving logs")
 async def get_logs(
-    limit: Optional[int] = Query(100, ge=1, le=1000, description="Limit the number of results returned"),
-    skip: Optional[int] = Query(0, ge=0, description="Number of results to skip"),
-    is_test: Optional[bool] = Query(None, description="Filter logs by test status")
+    skip: int = Query(0, ge=0, description="Number of logs to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of logs to return"),
+    is_test: Optional[bool] = Query(None, description="Filter by test flag")
 ):
-    """Fetch all logs with optional limit and test status filter"""
+    """Get all logs with pagination"""
     logs = await LogModel.get_all(limit=limit, skip=skip, is_test=is_test)
     return [LogInDB(**log) for log in logs]
 
 @router.get("/{id}", 
-            response_model=LogInDB,
-            summary="Get log by ID",
-            description="Retrieve a specific log entry by its ID")
-@handle_exceptions("fetching log")
+           response_model=LogInDB,
+           summary="Get log by ID",
+           description="Retrieve a specific log by its unique identifier")
+@handle_exceptions("retrieving log")
 async def get_log(
     id: str = Path(..., description="The ID of the log to retrieve")
 ):
-    """Fetch a log by ID"""
+    """Get a log by ID"""
     log = await LogModel.get_by_id(id)
     if not log:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
@@ -86,59 +101,76 @@ async def get_log(
     return LogInDB(**log)
 
 @router.get("/train/{train_id}", 
-            response_model=List[LogInDB],
-            summary="Get logs by train ID",
-            description="Retrieve logs for a specific train")
-@handle_exceptions("fetching logs for train")
+           response_model=List[LogInDB],
+           summary="Get logs by train",
+           description="Retrieve logs for a specific train")
+@handle_exceptions("retrieving logs by train")
 async def get_logs_by_train(
-    train_id: str = Path(..., description="The ID of the train to find logs for"),
-    limit: Optional[int] = Query(100, ge=1, le=1000, description="Limit the number of results returned")
+    train_id: str = Path(..., description="The ID of the train"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of logs to return")
 ):
-    """Fetch logs by train ID"""
+    """Get logs by train ID"""
+    # Check if the train exists
+    train = await TrainModel.get_by_train_id(train_id)
+    if not train:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
+                          detail=f"Train with ID {train_id} not found")
+    
     logs = await LogModel.get_by_train_id(train_id, limit)
     return [LogInDB(**log) for log in logs]
 
-@router.get("/train/{train_id}/latest", 
-            response_model=LogInDB,
-            summary="Get latest log for a train",
-            description="Retrieve the most recent log entry for a specific train")
-@handle_exceptions("fetching latest log for train")
-async def get_latest_log_for_train(
-    train_id: str = Path(..., description="The ID of the train to find the latest log for")
-):
-    """Fetch the latest log for a train"""
-    log = await LogModel.get_latest_by_train(train_id)
-    if not log:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
-                          detail=f"No logs found for train {train_id}")
-    return LogInDB(**log)
-
 @router.get("/rfid/{rfid_tag}", 
-            response_model=List[LogInDB],
-            summary="Get logs by RFID tag",
-            description="Retrieve logs that contain a specific RFID tag")
-@handle_exceptions("fetching logs by RFID tag")
+           response_model=List[LogInDB],
+           summary="Get logs by RFID tag",
+           description="Retrieve logs containing a specific RFID tag")
+@handle_exceptions("retrieving logs by RFID")
 async def get_logs_by_rfid(
     rfid_tag: str = Path(..., description="The RFID tag to search for"),
-    limit: Optional[int] = Query(100, ge=1, le=500, description="Limit the number of results returned")
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of logs to return")
 ):
-    """Fetch logs by RFID tag"""
+    """Get logs by RFID tag"""
     logs = await LogModel.get_logs_by_rfid(rfid_tag, limit)
     return [LogInDB(**log) for log in logs]
 
-@router.get("/train/{train_id}/timerange", 
-            response_model=List[LogInDB],
-            summary="Get logs within time range",
-            description="Retrieve logs for a train within a specific time range")
-@handle_exceptions("fetching logs in time range")
+@router.get("/time-range/{train_id}", 
+           response_model=List[LogInDB],
+           summary="Get logs in time range",
+           description="Retrieve logs for a train within a specified time range")
+@handle_exceptions("retrieving logs in time range")
 async def get_logs_in_time_range(
     train_id: str = Path(..., description="The ID of the train"),
-    start_time: datetime = Query(..., description="Start time (ISO format with timezone)"),
-    end_time: datetime = Query(..., description="End time (ISO format with timezone)")
+    start_time: datetime = Query(..., description="Start of time range (ISO format)"),
+    end_time: datetime = Query(..., description="End of time range (ISO format)")
 ):
-    """Fetch logs for a train within a time range"""
+    """Get logs for a train within a time range"""
+    # Check if the train exists
+    train = await TrainModel.get_by_train_id(train_id)
+    if not train:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
+                          detail=f"Train with ID {train_id} not found")
+    
     logs = await LogModel.get_logs_in_time_range(train_id, start_time, end_time)
     return [LogInDB(**log) for log in logs]
+
+@router.get("/latest/{train_id}", 
+           response_model=Optional[LogInDB],
+           summary="Get latest log",
+           description="Retrieve the most recent log for a specific train")
+@handle_exceptions("retrieving latest log")
+async def get_latest_log(
+    train_id: str = Path(..., description="The ID of the train")
+):
+    """Get the latest log for a train"""
+    # Check if the train exists
+    train = await TrainModel.get_by_train_id(train_id)
+    if not train:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
+                          detail=f"Train with ID {train_id} not found")
+    
+    log = await LogModel.get_latest_by_train(train_id)
+    if not log:
+        return None
+    return LogInDB(**log)
 
 @router.get("/train/{train_id}/hours/{hours}", 
             response_model=List[LogInDB],
@@ -156,7 +188,7 @@ async def get_logs_last_n_hours(
 @router.delete("/{id}", 
               response_model=Dict[str, str],
               summary="Delete a log",
-              description="Delete a log entry by its ID")
+              description="Remove a log entry from the system")
 @handle_exceptions("deleting log")
 async def delete_log(
     id: str = Path(..., description="The ID of the log to delete")
@@ -169,17 +201,4 @@ async def delete_log(
     
     return {"message": "Log deleted successfully"}
 
-@router.get("/accuracy-options", 
-            response_model=Dict[str, str],
-            summary="Get GPS accuracy categories",
-            description="Retrieve a description of GPS accuracy categories used in the system")
-async def get_accuracy_options():
-    """Get GPS accuracy categories and their descriptions"""
-    return {
-        "excellent": "< 5 meter error (HDOP ≤ 1.0, satellites ≥ 6)",
-        "good": "5-10 meter error (HDOP 1.0-2.0, satellites ≥ 5)",
-        "moderate": "10-25 meter error (HDOP 2.0-5.0, satellites ≥ 4)",
-        "poor": "25-50 meter error (HDOP 5.0-10.0, satellites ≥ 3)",
-        "very_poor": "> 50 meter error (HDOP > 10.0, satellites < 3)",
-        "invalid": "No GPS fix"
-    }
+
