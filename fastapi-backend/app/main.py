@@ -1,6 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import logging
+import traceback
 
 from app.database import connect_to_mongodb, close_mongodb_connection
 from app.routes.train import router as train_router
@@ -34,6 +36,23 @@ async def log_requests(request, call_next):
     response = await call_next(request)
     logging.info(f"Response status={response.status_code}")
     return response
+
+# Add a global exception handler middleware
+@app.middleware("http")
+async def catch_exceptions_middleware(request: Request, call_next):
+    """Global exception handler middleware"""
+    try:
+        return await call_next(request)
+    except Exception as e:
+        # Log the error with traceback
+        logging.error(f"Unhandled exception: {str(e)}")
+        logging.error(traceback.format_exc())
+        
+        # Return a 500 response
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error. Please try again later."}
+        )
 
 # Database connection events
 @app.on_event("startup")

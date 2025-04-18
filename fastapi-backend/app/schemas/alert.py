@@ -6,7 +6,7 @@ from typing import Optional, List
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 from bson import ObjectId
-from app.database import PyObjectId  # Use centralized PyObjectId implementation
+from app.database import PyObjectId
 from app.utils import normalize_timestamp, round_coordinates
 
 class AlertBase(BaseModel):

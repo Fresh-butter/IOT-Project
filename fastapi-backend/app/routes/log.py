@@ -7,6 +7,7 @@ from typing import List, Optional, Dict
 from app.models.log import LogModel
 from app.schemas.log import LogCreate, LogUpdate, LogInDB
 from app.config import get_current_ist_time
+from app.utils import handle_exceptions
 
 router = APIRouter()
 
@@ -15,50 +16,45 @@ router = APIRouter()
              status_code=status.HTTP_201_CREATED,
              summary="Create a new log entry",
              description="Create a new log entry for a train")
+@handle_exceptions("creating log")
 async def create_log(log: LogCreate = Body(...)):
     """Create a new log entry"""
-    try:
-        log_dict = log.dict()
-        # Set current time if not provided
-        if "timestamp" not in log_dict or log_dict["timestamp"] is None:
-            log_dict["timestamp"] = get_current_ist_time()
-            
-        log_id = await LogModel.create(log_dict)
-        created_log = await LogModel.get_by_id(log_id)
-        if not created_log:
-            raise HTTPException(status_code=500, detail="Failed to retrieve created log")
-        return LogInDB(**created_log)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error creating log: {str(e)}")
+    log_dict = log.dict()
+    # Set current time if not provided
+    if "timestamp" not in log_dict or log_dict["timestamp"] is None:
+        log_dict["timestamp"] = get_current_ist_time()
+        
+    log_id = await LogModel.create(log_dict)
+    created_log = await LogModel.get_by_id(log_id)
+    if not created_log:
+        raise HTTPException(status_code=500, detail="Failed to retrieve created log")
+    return LogInDB(**created_log)
 
 @router.put("/{id}", 
             response_model=LogInDB,
             summary="Update a log entry",
             description="Update the details of an existing log entry")
+@handle_exceptions("updating log")
 async def update_log(
     id: str = Path(..., description="The ID of the log to update"),
     log: LogUpdate = Body(...)
 ):
     """Update an existing log entry"""
-    try:
-        update_data = {k: v for k, v in log.dict().items() if v is not None}
+    update_data = {k: v for k, v in log.dict().items() if v is not None}
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid update data provided")
         
-        if not update_data:
-            raise HTTPException(status_code=400, detail="No valid update data provided")
-            
-        updated = await LogModel.update(id, update_data)
-        if not updated:
-            raise HTTPException(status_code=404, detail="Log not found")
-            
-        updated_log = await LogModel.get_by_id(id)
-        return LogInDB(**updated_log)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error updating log: {str(e)}")
+    updated = await LogModel.update(id, update_data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Log not found")
+        
+    updated_log = await LogModel.get_by_id(id)
+    return LogInDB(**updated_log)
 
 @router.get("/", 
             response_model=List[LogInDB],
-            summary="Get all logs",
-            description="Retrieve a list of all log entries with options for filtering")
+            summary="Get all logs")
 async def get_logs(
     limit: Optional[int] = Query(100, description="Limit the number of results returned"),
     is_test: Optional[bool] = Query(None, description="Filter logs by test status")

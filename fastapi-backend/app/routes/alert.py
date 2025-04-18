@@ -10,6 +10,7 @@ from datetime import datetime
 from app.models.alert import AlertModel
 from app.schemas.alert import AlertCreate, AlertUpdate, AlertInDB
 from app.config import get_current_ist_time
+from app.utils import handle_exceptions
 
 router = APIRouter()
 
@@ -54,48 +55,44 @@ async def get_alerts_by_recipient(
             status_code=status.HTTP_201_CREATED,
             summary="Create a new alert",
             description="Create a new alert to be sent between trains")
+@handle_exceptions("creating alert")
 async def create_alert(
     alert: AlertCreate = Body(..., description="The alert data to create")
 ):
     """Create a new alert"""
-    try:
-        alert_dict = alert.dict()
-        # Set current time if not provided
-        if "timestamp" not in alert_dict or alert_dict["timestamp"] is None:
-            alert_dict["timestamp"] = get_current_ist_time()
-            
-        alert_id = await AlertModel.create(alert_dict)
-        created_alert = await AlertModel.get_by_id(alert_id)
-        if not created_alert:
-            raise HTTPException(status_code=500, detail="Failed to retrieve created alert")
-        return AlertInDB(**created_alert)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error creating alert: {str(e)}")
+    alert_dict = alert.dict()
+    # Set current time if not provided
+    if "timestamp" not in alert_dict or alert_dict["timestamp"] is None:
+        alert_dict["timestamp"] = get_current_ist_time()
+        
+    alert_id = await AlertModel.create(alert_dict)
+    created_alert = await AlertModel.get_by_id(alert_id)
+    if not created_alert:
+        raise HTTPException(status_code=500, detail="Failed to retrieve created alert")
+    return AlertInDB(**created_alert)
 
 @router.put("/{id}", 
            response_model=AlertInDB,
            summary="Update an alert",
            description="Update the properties of an existing alert")
+@handle_exceptions("updating alert")
 async def update_alert(
     id: str = Path(..., description="The ID of the alert to update"),
     alert: AlertUpdate = Body(..., description="The updated alert data")
 ):
     """Update an alert"""
-    try:
-        # Filter out None values
-        alert_data = {k: v for k, v in alert.dict().items() if v is not None}
-        
-        if not alert_data:
-            raise HTTPException(status_code=400, detail="No valid update data provided")
-        
-        updated = await AlertModel.update(id, alert_data)
-        if not updated:
-            raise HTTPException(status_code=404, detail="Alert not found")
-        
-        updated_alert = await AlertModel.get_by_id(id)
-        return AlertInDB(**updated_alert)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error updating alert: {str(e)}")
+    # Filter out None values
+    alert_data = {k: v for k, v in alert.dict().items() if v is not None}
+    
+    if not alert_data:
+        raise HTTPException(status_code=400, detail="No valid update data provided")
+    
+    updated = await AlertModel.update(id, alert_data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    
+    updated_alert = await AlertModel.get_by_id(id)
+    return AlertInDB(**updated_alert)
 
 @router.delete("/{id}", 
               response_model=dict,

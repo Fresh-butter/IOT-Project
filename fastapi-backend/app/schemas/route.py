@@ -87,6 +87,15 @@ class RouteBase(BaseModel):
             raise ValueError("First checkpoint must have interval 0")
         return v
 
+    @validator('checkpoints')
+    def validate_checkpoints_ordering(cls, v):
+        """Validates that checkpoints have increasing intervals"""
+        if v and len(v) > 1:
+            for i in range(1, len(v)):
+                if v[i].interval <= v[i-1].interval:
+                    raise ValueError(f"Checkpoint at index {i} has interval {v[i].interval} which is not greater than the previous checkpoint's interval {v[i-1].interval}")
+        return v
+
     @validator("start_time", pre=True)
     def validate_start_time(cls, value):
         """Validates and normalizes start_time to IST timezone"""

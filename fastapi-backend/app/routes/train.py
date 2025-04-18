@@ -12,9 +12,7 @@ router = APIRouter()
 
 @router.post("/", 
              response_model=TrainInDB, 
-             status_code=status.HTTP_201_CREATED,
-             summary="Create a new train",
-             description="Create a new train with the provided information")
+             status_code=status.HTTP_201_CREATED)
 @handle_exceptions("creating train")
 async def create_train(train: TrainCreate = Body(...)):
     """Create a new train"""

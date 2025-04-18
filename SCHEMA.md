@@ -12,7 +12,15 @@
 }
 ```
 
-*allowed_statuses = [ "in_service_running", "in_service_not_running", "maintenance", "out_of_service" ]
+### Train Status Reference
+
+| Status                  | Description                                             |
+|-------------------------|---------------------------------------------------------|
+| `in_service_running`     | Train is currently running on its assigned route.                      |
+| `in_service_not_running` | Route assigned but train is currently halted (station/emergency)       |
+| `maintenance`            | Route assigned but train not running (default)                         |
+| `out_of_service`         | No assigned route; route_id and route_ref are null                     |
+
 
 ## routes
 
@@ -25,16 +33,19 @@
   "assigned_train_ref": "67e80645e4a58df990138c2b",
   "checkpoints": [
     {
+      "name": null,
       "interval": 0,
       "rfid_tag": "RFID_101_A1",
       "location": [77.20900, 28.61390]
     },
     {
+      "name": "station_alpha",
       "interval": 3600,
       "rfid_tag": null,
       "location": [77.10250, 28.70410]
     },
     {
+      "name": null,
       "interval": 7200,
       "rfid_tag": "RFID_101_B2",
       "location": [76.85125, 28.70412]
@@ -42,8 +53,15 @@
   ]
 }
 ```
+### Notes
+- `assigned_train_id` and `assigned_train_ref` can be null if no train has been assigned
+- `start_time` can be `null`. In that case, the actual start time is whenever the train starts running on the route.
+- `checkpoints` is an array of locations the train is expected to reach.
+- `interval` (in **seconds**) represents expected time since last checkpoint to pass the current checkpoint.
+  
+- `rfid_tag` can be `null` if no RFID scan is expected at that checkpoint.
+- `name`, if **null**, the checkpoint is not a station. If a string, the checkpoint is a station with a human-readable name.
 
-*interval is in seconds
 
 ## logs
 
@@ -58,6 +76,12 @@
   "is_test": false                        
 }
 ```
+### Notes
+- `rfid_tag` can be `null` if no RFID tag was detected during this log entry.
+- `location` can be `null` if no valid GPS signal was available during this log entry.
+- `accuracy` indicates the GPS signal quality based on HDOP and satellite count (see table below).
+- `is_test` is set to `true` if the data is for testing purposes only. When `true`, the backend will record the data but not run collision detection or other functionality on it.
+
 ### GPS Accuracy Classification (Based on HDOP and Satellite Count)
 
 | HDOP Range      | Minimum Satellites | Category           | Description             | Estimated Error (m) |
@@ -72,10 +96,14 @@
 
 ```json
 {
-  "sender_id": "67e80281e4a58df990138c24",
-  "recipient_id": "67e802cee4a58df990138c26",
+  "sender_ref": "67e80281e4a58df990138c24",
+  "recipient_ref": "67e802cee4a58df990138c26",
   "message": "Train 202 stopped unexpectedly.",
   "location": [76.85125, 28.70412],   
   "timestamp": "2025-04-10T14:23:05+05:30"
 }
 ```
+
+### Alert System Notes
+- System-generated alerts use a default sender_ref: "680142a4f8db812a8b87617c"
+- Every alert is sent both to the intended recipient train and to a "guest" account with recipient_ref: "680142cff8db812a8b87617d"

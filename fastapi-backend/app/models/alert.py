@@ -13,18 +13,23 @@ class AlertModel:
     collection = "alerts"
     
     @staticmethod
-    async def get_all(limit: int = 1000, skip: int = 0):
+    async def get_all(limit: int = 1000, skip: int = 0, filter_param=None):
         """
-        Get all alerts with pagination
+        Get all alerts with pagination and optional filtering
         
         Args:
             limit: Maximum number of alerts to return
             skip: Number of alerts to skip
+            filter_param: Optional filter parameter
             
         Returns:
             list: List of alerts sorted by timestamp (newest first)
         """
-        alerts = await get_collection(AlertModel.collection).find().sort(
+        filter_query = {}
+        if filter_param is not None:
+            filter_query["field_name"] = filter_param
+            
+        alerts = await get_collection(AlertModel.collection).find(filter_query).sort(
             "timestamp", -1
         ).skip(skip).limit(limit).to_list(limit)
         return alerts

@@ -145,12 +145,23 @@ class RouteModel:
         return result.deleted_count > 0
 
     @staticmethod
-    async def get_all():
+    async def get_all(limit: int = 1000, skip: int = 0, filter_param=None):
         """
-        Fetch all routes
+        Fetch all routes with optional filtering, sorting, and pagination
         
+        Args:
+            limit: Maximum number of routes to fetch
+            skip: Number of routes to skip
+            filter_param: Optional filter parameter
+            
         Returns:
             list: List of route documents
         """
-        routes = await get_collection(RouteModel.collection).find().to_list(1000)
-        return routes
+        filter_query = {}
+        if filter_param is not None:
+            filter_query["field_name"] = filter_param
+            
+        results = await get_collection(RouteModel.collection).find(filter_query).sort(
+            "timestamp", -1
+        ).skip(skip).limit(limit).to_list(limit)
+        return results

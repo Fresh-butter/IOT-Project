@@ -108,25 +108,18 @@ class LogModel:
         return result.deleted_count > 0
 
     @staticmethod
-    async def get_all(limit: int = 1000, is_test: bool = None):
+    async def get_all(limit: int = 1000, skip: int = 0, filter_param=None):
         """
-        Fetch all logs with optional filtering by test status
-        
-        Args:
-            limit: Maximum number of logs to return
-            is_test: Filter by test status if provided
-            
-        Returns:
-            list: List of log documents
+        Fetch all logs with optional filtering and pagination
         """
         filter_query = {}
-        if is_test is not None:
-            filter_query["is_test"] = is_test
+        if filter_param is not None:
+            filter_query["field_name"] = filter_param
             
-        logs = await get_collection(LogModel.collection).find(filter_query).sort(
+        results = await get_collection(LogModel.collection).find(filter_query).sort(
             "timestamp", -1
-        ).limit(limit).to_list(limit)
-        return logs
+        ).skip(skip).limit(limit).to_list(limit)
+        return results
         
     @staticmethod
     async def get_latest_by_train(train_id: str):
