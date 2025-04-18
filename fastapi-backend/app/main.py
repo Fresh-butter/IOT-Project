@@ -30,7 +30,7 @@ from app.routes.route import router as route_router
 from app.routes.alert import router as alert_router
 from app.routes.log import router as log_router
 from app.api.analytics import router as analytics_router
-from app.api.simulation import router as simulation_router
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -154,7 +154,6 @@ app.include_router(route_router, prefix="/api/routes", tags=["Routes"])
 app.include_router(alert_router, prefix="/api/alerts", tags=["Alerts"])
 app.include_router(log_router, prefix="/api/logs", tags=["Logs"])
 app.include_router(analytics_router, prefix="/api/analytics", tags=["Analytics"])
-app.include_router(simulation_router, prefix="/api/simulation", tags=["Simulation"])
 
 # Root endpoint
 @app.get("/", 
