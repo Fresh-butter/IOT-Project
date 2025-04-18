@@ -65,7 +65,7 @@ async def shutdown_db_client():
     await close_mongodb_connection()
     logging.info("Database connection closed")
 
-# Include routers - removed user router
+
 app.include_router(train_router, prefix="/api/trains", tags=["Trains"])
 app.include_router(route_router, prefix="/api/routes", tags=["Routes"])
 app.include_router(alert_router, prefix="/api/alerts", tags=["Alerts"])

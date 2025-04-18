@@ -3,10 +3,11 @@ Log model module.
 Defines the structure and operations for log data in MongoDB.
 """
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.database import get_collection
 from app.config import get_current_ist_time
 from app.utils import round_coordinates
+from typing import List, Optional, Dict, Any
 
 class LogModel:
     collection = "logs"
@@ -27,7 +28,7 @@ class LogModel:
             log_data["timestamp"] = get_current_ist_time()
             
         # Convert train_ref string to ObjectId for MongoDB storage
-        if "train_ref" in log_data and log_data["train_ref"]:
+        if "train_ref" in log_data and isinstance(log_data["train_ref"], str):
             log_data["train_ref"] = ObjectId(log_data["train_ref"])
         
         # Round coordinates if location is present
@@ -50,7 +51,7 @@ class LogModel:
             bool: True if update was successful, False otherwise
         """
         # Handle ObjectId conversion for updates
-        if "train_ref" in update_data and update_data["train_ref"]:
+        if "train_ref" in update_data and isinstance(update_data["train_ref"], str):
             update_data["train_ref"] = ObjectId(update_data["train_ref"])
         
         # Round coordinates if location is present
@@ -108,13 +109,21 @@ class LogModel:
         return result.deleted_count > 0
 
     @staticmethod
-    async def get_all(limit: int = 1000, skip: int = 0, filter_param=None):
+    async def get_all(limit: int = 1000, skip: int = 0, is_test: Optional[bool] = None):
         """
         Fetch all logs with optional filtering and pagination
+        
+        Args:
+            limit: Maximum number of logs to fetch
+            skip: Number of logs to skip
+            is_test: Optional filter for test logs
+            
+        Returns:
+            list: List of log documents
         """
         filter_query = {}
-        if filter_param is not None:
-            filter_query["field_name"] = filter_param
+        if is_test is not None:
+            filter_query["is_test"] = is_test
             
         results = await get_collection(LogModel.collection).find(filter_query).sort(
             "timestamp", -1
@@ -137,3 +146,61 @@ class LogModel:
         ).sort("timestamp", -1).limit(1).to_list(1)
         
         return logs[0] if logs else None
+
+    @staticmethod
+    async def get_logs_by_rfid(rfid_tag: str, limit: int = 100):
+        """
+        Get logs that contain a specific RFID tag
+        
+        Args:
+            rfid_tag: RFID tag identifier
+            limit: Maximum number of logs to return
+            
+        Returns:
+            list: List of log documents containing the specified RFID tag
+        """
+        logs = await get_collection(LogModel.collection).find(
+            {"rfid_tag": rfid_tag}
+        ).sort("timestamp", -1).limit(limit).to_list(limit)
+        return logs
+        
+    @staticmethod
+    async def get_logs_in_time_range(train_id: str, start_time: datetime, end_time: datetime):
+        """
+        Get logs for a train within a specific time range
+        
+        Args:
+            train_id: Train identifier
+            start_time: Start of time range
+            end_time: End of time range
+            
+        Returns:
+            list: List of log documents within the specified time range
+        """
+        logs = await get_collection(LogModel.collection).find({
+            "train_id": train_id,
+            "timestamp": {
+                "$gte": start_time,
+                "$lte": end_time
+            }
+        }).sort("timestamp", 1).to_list(1000)
+        return logs
+        
+    @staticmethod
+    async def get_last_n_hours_logs(train_id: str, hours: int = 6):
+        """
+        Get logs for a train from the last N hours
+        
+        Args:
+            train_id: Train identifier
+            hours: Number of hours to look back
+            
+        Returns:
+            list: List of log documents from the last N hours
+        """
+        time_threshold = get_current_ist_time() - timedelta(hours=hours)
+        logs = await get_collection(LogModel.collection).find({
+            "train_id": train_id,
+            "timestamp": {"$gte": time_threshold}
+        }).sort("timestamp", 1).to_list(1000)
+        return logs

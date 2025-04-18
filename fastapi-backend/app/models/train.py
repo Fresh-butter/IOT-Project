@@ -2,8 +2,10 @@
 Train model module.
 Defines the structure and operations for train data in MongoDB.
 """
+from typing import List, Optional, Dict, Any
 from bson import ObjectId
 from app.database import get_collection
+from app.config import TRAIN_STATUS
 
 class TrainModel:
     collection = "trains"
@@ -127,3 +129,59 @@ class TrainModel:
             
         trains = await get_collection(TrainModel.collection).find(filter_query).to_list(1000)
         return trains
+        
+    @staticmethod
+    async def get_active_trains():
+        """
+        Fetch all trains that are currently in service and running
+        
+        Returns:
+            list: List of active train documents
+        """
+        trains = await get_collection(TrainModel.collection).find(
+            {"current_status": TRAIN_STATUS["IN_SERVICE_RUNNING"]}
+        ).to_list(1000)
+        return trains
+        
+    @staticmethod
+    async def update_status(id: str, status: str):
+        """
+        Update a train's status
+        
+        Args:
+            id: Train document ID
+            status: New status (must be a valid status from TRAIN_STATUS)
+            
+        Returns:
+            bool: True if status was updated successfully, False otherwise
+        """
+        if status not in TRAIN_STATUS.values():
+            raise ValueError(f"Invalid train status: {status}")
+            
+        result = await get_collection(TrainModel.collection).update_one(
+            {"_id": ObjectId(id)},
+            {"$set": {"current_status": status}}
+        )
+        return result.modified_count > 0
+        
+    @staticmethod
+    async def assign_route(train_id: str, route_id: str, route_ref: str):
+        """
+        Assign a route to a train
+        
+        Args:
+            train_id: Train document ID
+            route_id: Route identifier
+            route_ref: MongoDB ObjectId of the route document
+            
+        Returns:
+            bool: True if route was assigned successfully, False otherwise
+        """
+        result = await get_collection(TrainModel.collection).update_one(
+            {"_id": ObjectId(train_id)},
+            {"$set": {
+                "current_route_id": route_id,
+                "current_route_ref": ObjectId(route_ref)
+            }}
+        )
+        return result.modified_count > 0

@@ -5,6 +5,7 @@ Defines the structure and operations for route data in MongoDB.
 from bson import ObjectId
 from app.database import get_collection
 from app.utils import round_coordinates
+from typing import List, Optional, Dict, Any
 
 class RouteModel:
     collection = "routes"
@@ -32,10 +33,6 @@ class RouteModel:
         # Convert ObjectId references
         if "assigned_train_ref" in route_data and route_data["assigned_train_ref"]:
             route_data["assigned_train_ref"] = ObjectId(route_data["assigned_train_ref"])
-        
-        # Round coordinates if location is present
-        if "location" in route_data and route_data["location"]:
-            route_data["location"] = round_coordinates(route_data["location"])
         
         # Round coordinates in all checkpoints
         if "checkpoints" in route_data and route_data["checkpoints"]:
@@ -74,10 +71,6 @@ class RouteModel:
                 update_data["assigned_train_ref"] = ObjectId(update_data["assigned_train_ref"])
             else:
                 update_data["assigned_train_ref"] = None
-
-        # Round coordinates if location is present
-        if "location" in update_data and update_data["location"]:
-            update_data["location"] = round_coordinates(update_data["location"])
 
         # Round coordinates in all checkpoints
         if "checkpoints" in update_data and update_data["checkpoints"]:
@@ -145,23 +138,66 @@ class RouteModel:
         return result.deleted_count > 0
 
     @staticmethod
-    async def get_all(limit: int = 1000, skip: int = 0, filter_param=None):
+    async def get_all(limit: int = 1000, skip: int = 0):
         """
-        Fetch all routes with optional filtering, sorting, and pagination
+        Fetch all routes with optional pagination
         
         Args:
             limit: Maximum number of routes to fetch
             skip: Number of routes to skip
-            filter_param: Optional filter parameter
             
         Returns:
             list: List of route documents
         """
-        filter_query = {}
-        if filter_param is not None:
-            filter_query["field_name"] = filter_param
-            
-        results = await get_collection(RouteModel.collection).find(filter_query).sort(
-            "timestamp", -1
-        ).skip(skip).limit(limit).to_list(limit)
+        results = await get_collection(RouteModel.collection).find({}).skip(skip).limit(limit).to_list(limit)
         return results
+        
+    @staticmethod
+    async def find_routes_with_rfid_tag(rfid_tag: str):
+        """
+        Find routes that contain a specific RFID tag in one of their checkpoints
+        
+        Args:
+            rfid_tag: RFID tag identifier
+            
+        Returns:
+            list: List of route documents containing the specified RFID tag
+        """
+        pipeline = [
+            {
+                "$match": {
+                    "checkpoints": {
+                        "$elemMatch": {
+                            "rfid_tag": rfid_tag
+                        }
+                    }
+                }
+            }
+        ]
+        
+        routes = await get_collection(RouteModel.collection).aggregate(pipeline).to_list(1000)
+        return routes
+        
+    @staticmethod
+    async def assign_train(route_id: str, train_id: str, train_ref: str):
+        """
+        Assign a train to a route
+        
+        Args:
+            route_id: Route document ID
+            train_id: Train identifier
+            train_ref: MongoDB ObjectId of the train document
+            
+        Returns:
+            bool: True if train was assigned successfully, False otherwise
+        """
+        result = await get_collection(RouteModel.collection).update_one(
+            {"_id": ObjectId(route_id)},
+            {
+                "$set": {
+                    "assigned_train_id": train_id,
+                    "assigned_train_ref": ObjectId(train_ref)
+                }
+            }
+        )
+        return result.modified_count > 0

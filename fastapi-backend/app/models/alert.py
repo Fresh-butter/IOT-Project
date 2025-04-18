@@ -59,7 +59,7 @@ class AlertModel:
             list: List of alert documents
         """
         alerts = await get_collection(AlertModel.collection).find(
-            {"recipient_id": ObjectId(recipient_id)}
+            {"recipient_ref": ObjectId(recipient_id)}
         ).to_list(1000)
         return alerts
     
@@ -71,10 +71,10 @@ class AlertModel:
             alert_data["timestamp"] = get_current_ist_time()
             
         # Convert string IDs to ObjectIds
-        if "sender_id" in alert_data and isinstance(alert_data["sender_id"], str):
-            alert_data["sender_id"] = ObjectId(alert_data["sender_id"])
-        if "recipient_id" in alert_data and isinstance(alert_data["recipient_id"], str):
-            alert_data["recipient_id"] = ObjectId(alert_data["recipient_id"])
+        if "sender_ref" in alert_data and isinstance(alert_data["sender_ref"], str):
+            alert_data["sender_ref"] = ObjectId(alert_data["sender_ref"])
+        if "recipient_ref" in alert_data and isinstance(alert_data["recipient_ref"], str):
+            alert_data["recipient_ref"] = ObjectId(alert_data["recipient_ref"])
         
         # Round coordinates if location is present
         if "location" in alert_data and alert_data["location"]:
@@ -87,10 +87,10 @@ class AlertModel:
     async def update(id: str, alert_data: dict):
         """Update an alert"""
         # Convert string IDs to ObjectIds
-        if "sender_id" in alert_data and isinstance(alert_data["sender_id"], str):
-            alert_data["sender_id"] = ObjectId(alert_data["sender_id"])
-        if "recipient_id" in alert_data and isinstance(alert_data["recipient_id"], str):
-            alert_data["recipient_id"] = ObjectId(alert_data["recipient_id"])
+        if "sender_ref" in alert_data and isinstance(alert_data["sender_ref"], str):
+            alert_data["sender_ref"] = ObjectId(alert_data["sender_ref"])
+        if "recipient_ref" in alert_data and isinstance(alert_data["recipient_ref"], str):
+            alert_data["recipient_ref"] = ObjectId(alert_data["recipient_ref"])
         
         # Round coordinates if location is present
         if "location" in alert_data and alert_data["location"]:
@@ -106,3 +106,37 @@ class AlertModel:
         """Delete an alert"""
         result = await get_collection(AlertModel.collection).delete_one({"_id": ObjectId(id)})
         return result.deleted_count > 0
+    
+    @staticmethod
+    async def get_by_sender(sender_id: str, limit: int = 100):
+        """
+        Get alerts sent by a specific sender
+        
+        Args:
+            sender_id: ID of the train that sent the alerts
+            limit: Maximum number of alerts to return
+            
+        Returns:
+            list: List of alert documents
+        """
+        alerts = await get_collection(AlertModel.collection).find(
+            {"sender_ref": ObjectId(sender_id)}
+        ).sort("timestamp", -1).limit(limit).to_list(limit)
+        return alerts
+    
+    @staticmethod
+    async def get_recent_alerts(hours: int = 24):
+        """
+        Get all alerts from the last X hours
+        
+        Args:
+            hours: Number of hours to look back
+            
+        Returns:
+            list: List of recent alert documents
+        """
+        time_threshold = get_current_ist_time() - datetime.timedelta(hours=hours)
+        alerts = await get_collection(AlertModel.collection).find(
+            {"timestamp": {"$gte": time_threshold}}
+        ).sort("timestamp", -1).to_list(1000)
+        return alerts
