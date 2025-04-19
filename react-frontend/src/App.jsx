@@ -1,13 +1,24 @@
 import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import Dashboard from './components/Dashboard';
+import Footer from './components/Footer';
+import Dashboard from './pages/Dashboard';
+import ApiDocs from './pages/ApiDocs';
+import Trains from './pages/Trains';
 
 const App = () => {
   return (
-    <div className="min-h-screen bg-gray-100">
+    <Router>
       <Navbar />
-      <Dashboard />
-    </div>
+      <div className="container mx-auto p-4">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/trains" element={<Trains />} />
+          <Route path="/api-docs" element={<ApiDocs />} />
+        </Routes>
+      </div>
+      <Footer />
+    </Router>
   );
 };
 
