@@ -64,7 +64,7 @@ const Analytics = () => {
       </p>
       <ul>
         <li>Total Alerts: {analytics.totalAlerts}</li>
-        <li>Total Trains: {analytics.totalTrains}</li>
+        <li>Total Trains: {analytics.totalTrains}</li>  
         <li>Active Trains: {analytics.activeTrains}</li>
         <li>Out-of-Service Trains: {analytics.outOfServiceTrains}</li>
         <li>Log Count: {analytics.logCount}</li>

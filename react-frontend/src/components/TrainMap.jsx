@@ -2,6 +2,12 @@
 import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: '/assets/marker-icon-2x.png',
+    iconUrl: '/assets/marker-icon.png',
+    shadowUrl: '/assets/marker-shadow.png',
+});
+
 const TrainMap = () => {
   const center = [17.445405055968216, 78.34931177070476]; // Change to your region
   const zoom = 50;
