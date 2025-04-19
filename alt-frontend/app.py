@@ -1,17 +1,22 @@
 from flask import Flask, render_template
-import random
+import requests
 
 app = Flask(__name__)
 
-# Mock data for trains
-trains = [
-    {"name": "Train A", "latitude": 12.9716, "longitude": 77.5946, "speed": 80, "alert": 0},
-    {"name": "Train B", "latitude": 12.2958, "longitude": 76.6394, "speed": 100, "alert": 1},
-]
+# Backend API base URL
+API_BASE_URL = "https://iot-project-c3wb.onrender.com"  # Ensure no trailing slash
 
 @app.route('/')
 def index():
-    return render_template("index.html", trains=trains)
+    try:
+        # Fetch data from the backend
+        trains = requests.get(f"{API_BASE_URL}/trains").json()
+        alerts = requests.get(f"{API_BASE_URL}/alerts").json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data: {e}")
+        trains = []
+        alerts = []
+    return render_template("index.html", trains=trains, alerts=alerts)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True)  # Use debug=True only in development
