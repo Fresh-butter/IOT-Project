@@ -5,8 +5,8 @@ Defines the structure and operations for log data in MongoDB.
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone
 from app.database import get_collection, safe_db_operation
-from app.config import get_current_ist_time
-from app.utils import round_coordinates, normalize_timestamp  # Add this import
+from app.config import get_current_utc_time, convert_to_ist
+from app.utils import round_coordinates, normalize_timestamp
 from typing import List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field, root_validator
 
@@ -51,17 +51,23 @@ class LogOperations:
             # Make a copy to avoid modifying the original
             log_data_copy = log_data.copy()
             
-            # Simplified timestamp handling - assume it's already in IST format
+            # Timestamp handling - normalize all timestamps to UTC
             if "timestamp" not in log_data_copy or log_data_copy["timestamp"] is None:
-                log_data_copy["timestamp"] = get_current_ist_time()
+                log_data_copy["timestamp"] = get_current_utc_time()
             else:
-                # If string, parse it; if already datetime, use as-is
+                # If string, parse it and normalize to UTC
                 if isinstance(log_data_copy["timestamp"], str):
                     try:
-                        log_data_copy["timestamp"] = datetime.fromisoformat(log_data_copy["timestamp"].replace('Z', '+00:00'))
+                        # Parse with timezone awareness
+                        dt = datetime.fromisoformat(log_data_copy["timestamp"].replace('Z', '+00:00'))
+                        # Normalize to UTC
+                        log_data_copy["timestamp"] = normalize_timestamp(dt)
                     except ValueError:
-                        # If parsing fails, use current time
-                        log_data_copy["timestamp"] = get_current_ist_time()
+                        # If parsing fails, use current UTC time
+                        log_data_copy["timestamp"] = get_current_utc_time()
+                else:
+                    # If already a datetime, ensure it's UTC
+                    log_data_copy["timestamp"] = normalize_timestamp(log_data_copy["timestamp"])
             
             # Convert train_ref string to ObjectId for MongoDB storage
             if "train_ref" in log_data_copy and isinstance(log_data_copy["train_ref"], str):
@@ -73,7 +79,7 @@ class LogOperations:
                 
             result = await get_collection(LogOperations.collection).insert_one(log_data_copy)
             return str(result.inserted_id)
-            
+        
         return await safe_db_operation(operation, "Error creating log")
 
     @staticmethod
@@ -91,6 +97,10 @@ class LogOperations:
         # Handle ObjectId conversion for updates
         if "train_ref" in update_data and isinstance(update_data["train_ref"], str):
             update_data["train_ref"] = ObjectId(update_data["train_ref"])
+        
+        # Handle timestamp normalization to UTC
+        if "timestamp" in update_data:
+            update_data["timestamp"] = normalize_timestamp(update_data["timestamp"])
         
         # Round coordinates if location is present
         if "location" in update_data and update_data["location"]:
@@ -131,7 +141,7 @@ class LogOperations:
             {"train_id": train_id}
         ).sort("timestamp", -1).limit(limit).to_list(limit)
         return logs
-        
+
     @staticmethod
     async def delete(id: str):
         """
@@ -167,7 +177,7 @@ class LogOperations:
             "timestamp", -1
         ).skip(skip).limit(limit).to_list(limit)
         return results
-        
+
     @staticmethod
     async def get_latest_by_train(train_id: str):
         """
@@ -201,7 +211,7 @@ class LogOperations:
             {"rfid_tag": rfid_tag}
         ).sort("timestamp", -1).limit(limit).to_list(limit)
         return logs
-        
+
     @staticmethod
     async def get_logs_in_time_range(train_id: str, start_time: datetime, end_time: datetime):
         """
@@ -209,21 +219,25 @@ class LogOperations:
         
         Args:
             train_id: Train identifier
-            start_time: Start of time range
-            end_time: End of time range
+            start_time: Start of time range (will be normalized to UTC)
+            end_time: End of time range (will be normalized to UTC)
             
         Returns:
             list: List of log documents within the specified time range
         """
+        # Normalize input dates to UTC
+        start_time_utc = normalize_timestamp(start_time)
+        end_time_utc = normalize_timestamp(end_time)
+        
         logs = await get_collection(LogOperations.collection).find({
             "train_id": train_id,
             "timestamp": {
-                "$gte": start_time,
-                "$lte": end_time
+                "$gte": start_time_utc,
+                "$lte": end_time_utc
             }
         }).sort("timestamp", 1).to_list(1000)
         return logs
-        
+
     @staticmethod
     async def get_last_n_hours_logs(train_id: str, hours: int = 6):
         """
@@ -236,7 +250,7 @@ class LogOperations:
         Returns:
             list: List of log documents from the last N hours
         """
-        time_threshold = get_current_ist_time() - timedelta(hours=hours)
+        time_threshold = get_current_utc_time() - timedelta(hours=hours)
         logs = await get_collection(LogOperations.collection).find({
             "train_id": train_id,
             "timestamp": {"$gte": time_threshold}
@@ -249,14 +263,14 @@ class LogOperations:
         Get all logs since the specified timestamp
         
         Args:
-            timestamp (datetime): The timestamp to query logs from
+            timestamp (datetime): The timestamp to query logs from (will be normalized to UTC)
             
         Returns:
             list: List of log documents
         """
-        from app.database import get_collection
+        timestamp_utc = normalize_timestamp(timestamp)
         logs = await get_collection(cls.collection).find({
-            "timestamp": {"$gte": timestamp}
+            "timestamp": {"$gte": timestamp_utc}
         }).to_list(length=None)
         
         return logs
@@ -268,15 +282,15 @@ class LogOperations:
         
         Args:
             train_id (str): The train ID to filter logs
-            timestamp (datetime): The timestamp to query logs from
+            timestamp (datetime): The timestamp to query logs from (will be normalized to UTC)
             
         Returns:
             list: List of log documents for the specified train
         """
-        from app.database import get_collection
+        timestamp_utc = normalize_timestamp(timestamp)
         logs = await get_collection(cls.collection).find({
             "train_id": train_id,
-            "timestamp": {"$gte": timestamp}
+            "timestamp": {"$gte": timestamp_utc}
         }).sort("timestamp", 1).to_list(length=None)
         
         return logs
@@ -287,14 +301,14 @@ class LogOperations:
         Count logs since the specified timestamp
         
         Args:
-            timestamp (datetime): The timestamp to query logs from
+            timestamp (datetime): The timestamp to query logs from (will be normalized to UTC)
             
         Returns:
             int: Count of logs
         """
-        from app.database import get_collection
+        timestamp_utc = normalize_timestamp(timestamp)
         count = await get_collection(cls.collection).count_documents({
-            "timestamp": {"$gte": timestamp}
+            "timestamp": {"$gte": timestamp_utc}
         })
         
         return count
@@ -307,7 +321,6 @@ class LogOperations:
         Returns:
             list: Latest log document for each train
         """
-        from app.database import get_collection
         pipeline = [
             {"$sort": {"timestamp": -1}},
             {"$group": {

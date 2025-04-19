@@ -12,7 +12,8 @@ from app.models.route import RouteModel
 from app.models.alert import AlertModel
 from app.core.tracking import get_train_position, is_train_on_schedule, update_train_progress
 from app.core.collision import check_all_train_collisions
-from app.config import get_current_ist_time, TRAIN_STATUS, SYSTEM_SENDER_ID
+from app.config import get_current_utc_time, TRAIN_STATUS, SYSTEM_SENDER_ID
+from app.utils import format_timestamp_ist
 
 class TrainService:
     """Service for train-related operations"""
@@ -75,7 +76,8 @@ class TrainService:
             "route": route_info,
             "schedule": schedule_info,
             "recent_alerts": recent_alerts,
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time(),  # Changed from IST to UTC
+            "formatted_timestamp": format_timestamp_ist(get_current_utc_time())  # Format as IST for display
         }
         
         return result
@@ -126,7 +128,7 @@ class TrainService:
                 "old_status": train.get("current_status"),
                 "new_status": new_status
             },
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
         
         log_id = await LogModel.create(log_data)
@@ -136,7 +138,9 @@ class TrainService:
             "train_id": train_id,
             "old_status": train.get("current_status"),
             "new_status": new_status,
-            "log_id": log_id
+            "log_id": log_id,
+            "timestamp": get_current_utc_time(),  # Changed from IST to UTC
+            "formatted_timestamp": format_timestamp_ist(get_current_utc_time())  # Format as IST for display
         }
     
     @staticmethod
@@ -162,7 +166,7 @@ class TrainService:
         
         # Set timestamp if not provided
         if "timestamp" not in log_data:
-            log_data["timestamp"] = get_current_ist_time()
+            log_data["timestamp"] = get_current_utc_time()  # Changed from IST to UTC
         
         # Create the log entry
         log_id = await LogModel.create(log_data)
@@ -187,9 +191,9 @@ class TrainService:
             alert_data = {
                 "sender_ref": SYSTEM_SENDER_ID,
                 "recipient_ref": str(train["_id"]),
-                "message": f"Train {train_id} has completed its route.",
+                "message": f"ROUTE_COMPLETED: Train {train_id} has completed its route.",
                 "location": log_data.get("location"),
-                "timestamp": get_current_ist_time()
+                "timestamp": get_current_utc_time()  # Changed from IST to UTC
             }
             
             await AlertModel.create(alert_data)
@@ -200,7 +204,8 @@ class TrainService:
             "train_id": train_id,
             "progress_update": progress_update,
             "collision_risks": collision_risks,
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time(),  # Changed from IST to UTC
+            "formatted_timestamp": format_timestamp_ist(get_current_utc_time())  # Format as IST for display
         }
     
     @staticmethod
@@ -234,7 +239,7 @@ class TrainService:
         
         # Perform the assignment
         await TrainModel.assign_route(str(train["_id"]), route["route_id"], str(route["_id"]))
-        await RouteModel.assign_train(str(route["_id"]), train["train_id"], str(train["_id"]))
+        await RouteModel.assign_train(route["route_id"], train["train_id"], str(train["_id"]))
         
         # Update train status to running
         await TrainService.update_train_status(train_id, TRAIN_STATUS["IN_SERVICE_RUNNING"])
@@ -248,18 +253,20 @@ class TrainService:
                 "route_id": route_id,
                 "route_name": route.get("name")
             },
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
         
         log_id = await LogModel.create(log_data)
         
+        # Return the result
         return {
             "success": True,
             "train_id": train_id,
             "route_id": route_id,
             "status": TRAIN_STATUS["IN_SERVICE_RUNNING"],
             "log_id": log_id,
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time(),  # Changed from IST to UTC
+            "formatted_timestamp": format_timestamp_ist(get_current_utc_time())  # Format as IST for display
         }
     
     @staticmethod
@@ -274,7 +281,8 @@ class TrainService:
         active_trains = await TrainModel.get_active_trains()
         
         dashboard_data = {
-            "timestamp": get_current_ist_time(),
+            "timestamp": get_current_utc_time(),  # Changed from IST to UTC
+            "formatted_timestamp": format_timestamp_ist(get_current_utc_time()),  # Format as IST for display
             "active_train_count": len(active_trains),
             "trains": [],
             "collision_risks": [],
@@ -293,6 +301,8 @@ class TrainService:
                 "status": train.get("current_status"),
                 "position": {
                     "location": position.get("location"),
+                    "last_updated": position.get("timestamp"),
+                    "formatted_last_updated": format_timestamp_ist(position.get("timestamp")),  # Format as IST for display
                     "nearest_checkpoint": position.get("nearest_checkpoint"),
                     "next_checkpoint": position.get("next_checkpoint")
                 },

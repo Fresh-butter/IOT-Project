@@ -13,7 +13,7 @@ from app.models.alert import AlertModel
 from app.core.collision import check_all_train_collisions
 from app.core.location import detect_route_deviations, check_deviation_resolved
 from app.core.tracking import detect_train_status_change, get_active_trains_locations
-from app.config import get_current_ist_time, MONITOR_INTERVAL_SECONDS, TRAIN_STATUS
+from app.config import get_current_ist_time, get_current_utc_time, MONITOR_INTERVAL_SECONDS, TRAIN_STATUS
 
 logger = logging.getLogger("app.tasks.monitor")
 
@@ -62,7 +62,7 @@ async def monitor_train_collisions():
                     "recipient_ref": str(train1["_id"]),
                     "message": message,
                     "location": risk["location"],
-                    "timestamp": get_current_ist_time()
+                    "timestamp": get_current_utc_time()  # Changed from IST to UTC
                 }
                 await AlertModel.create(alert1_data, create_guest_copy=False)
                 
@@ -72,7 +72,7 @@ async def monitor_train_collisions():
                     "recipient_ref": str(train2["_id"]),
                     "message": message,
                     "location": risk["location"],
-                    "timestamp": get_current_ist_time()
+                    "timestamp": get_current_utc_time()  # Changed from IST to UTC
                 }
                 await AlertModel.create(alert2_data, create_guest_copy=False)
                 
@@ -82,7 +82,7 @@ async def monitor_train_collisions():
                     "recipient_ref": "680142cff8db812a8b87617d",  # Guest account ID
                     "message": message,
                     "location": risk["location"],
-                    "timestamp": get_current_ist_time()
+                    "timestamp": get_current_utc_time()  # Changed from IST to UTC
                 }
                 await AlertModel.create(guest_alert_data, create_guest_copy=False)
                 

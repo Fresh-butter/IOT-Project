@@ -2,19 +2,19 @@
 Main application module.
 Initializes FastAPI application with routes and middleware.
 """
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 import traceback
 import asyncio
-from typing import Optional
+from typing import Optional, Dict, Any
 
 # Import configuration first to ensure environment variables are loaded
 from app.config import (
     API_TITLE, API_DESCRIPTION, API_VERSION, ALLOW_ORIGINS,
     configure_logging, MONITORING_ENABLED, MONITOR_INTERVAL_SECONDS,
-    monitor_stop_event
+    monitor_stop_event, get_current_utc_time, get_current_ist_time
 )
 
 # Configure logging before any other operations
@@ -107,14 +107,19 @@ async def startup_db_client():
         if MONITORING_ENABLED:
             # Import here to avoid circular imports
             from app.tasks.monitor import start_monitoring
+            from app.utils import check_db_connection
             
             # Delay monitoring startup to ensure DB connection is ready
             await asyncio.sleep(2)
             
-            monitoring_task = asyncio.create_task(
-                start_monitoring(interval_seconds=MONITOR_INTERVAL_SECONDS, stop_event=monitor_stop_event)
-            )
-            logger.info(f"Background monitoring tasks started with interval {MONITOR_INTERVAL_SECONDS}s")
+            # Only start monitoring if database is connected
+            if check_db_connection():
+                monitoring_task = asyncio.create_task(
+                    start_monitoring(interval_seconds=MONITOR_INTERVAL_SECONDS, stop_event=monitor_stop_event)
+                )
+                logger.info(f"Background monitoring tasks started with interval {MONITOR_INTERVAL_SECONDS}s")
+            else:
+                logger.warning("Database connection not established, monitoring tasks not started")
         else:
             logger.info("Background monitoring is disabled by configuration")
     except Exception as e:
@@ -166,7 +171,11 @@ async def root():
         "version": API_VERSION,
         "status": "online",
         "docs_url": "/docs",
-        "monitoring_enabled": MONITORING_ENABLED
+        "monitoring_enabled": MONITORING_ENABLED,
+        "server_time": {
+            "utc": get_current_utc_time().isoformat(),
+            "ist": get_current_ist_time().isoformat()
+        }
     }
 
 # Version endpoint
@@ -198,5 +207,6 @@ async def status():
         return {
             "status": "error",
             "message": "Failed to generate status report",
-            "error": str(e)
+            "error": str(e),
+            "timestamp": get_current_utc_time().isoformat()
         }

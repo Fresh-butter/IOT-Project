@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, validator
 from typing import List, Optional
 from bson import ObjectId
 from app.database import PyObjectId
-from app.utils import normalize_timestamp, round_coordinates
+from app.utils import normalize_timestamp, round_coordinates, format_timestamp_ist
 
 class Checkpoint(BaseModel):
     """
@@ -68,8 +68,8 @@ class RouteBase(BaseModel):
     )
     start_time: Optional[datetime] = Field(
         None, 
-        description="Scheduled start time (in IST) for the route",
-        example="2025-03-29T19:30:00+05:30"
+        description="Scheduled start time (stored in UTC, displayed in IST)",
+        example="2025-03-29T14:00:00Z"
     )
     assigned_train_id: Optional[str] = Field(
         None, 
@@ -104,13 +104,16 @@ class RouteBase(BaseModel):
 
     @validator("start_time", pre=True)
     def validate_start_time(cls, value):
-        """Validates and normalizes start_time to IST timezone"""
+        """Validates and normalizes start_time to UTC timezone"""
         if value is None:
             return None
         return normalize_timestamp(value)
 
     class Config:
-        json_encoders = {ObjectId: str}
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda dt: format_timestamp_ist(dt)  # Format as IST for display
+        }
         schema_extra = {
             "example": {
                 "route_id": "R101",
@@ -175,4 +178,7 @@ class RouteInDB(RouteBase):
 
     class Config:
         allow_population_by_field_name = True
-        json_encoders = {ObjectId: str}
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda dt: format_timestamp_ist(dt)  # Format as IST for display
+        }

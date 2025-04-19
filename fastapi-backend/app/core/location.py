@@ -4,7 +4,7 @@ from app.models.route import RouteModel
 from app.models.log import LogModel
 from app.models.alert import AlertModel
 from app.utils import calculate_distance
-from app.config import DISTANCE_THRESHOLDS, SYSTEM_SENDER_ID, get_current_ist_time
+from app.config import DISTANCE_THRESHOLDS, SYSTEM_SENDER_ID, get_current_utc_time
 
 async def calculate_distance_to_route(location: List[float], route_checkpoints: List[Dict]) -> float:
     """
@@ -105,7 +105,7 @@ async def detect_route_deviations(train_id: str, distance_threshold: float = Non
             "recipient_ref": str(train["_id"]),
             "message": message,
             "location": latest_log["location"],
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
         await AlertModel.create(train_alert_data, create_guest_copy=False)
         
@@ -115,7 +115,7 @@ async def detect_route_deviations(train_id: str, distance_threshold: float = Non
             "recipient_ref": "680142cff8db812a8b87617d",  # Guest account ID
             "message": message,
             "location": latest_log["location"],
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
         await AlertModel.create(guest_alert_data, create_guest_copy=False)
     
@@ -129,45 +129,50 @@ async def check_deviation_resolved(train_id: str) -> Optional[str]:
         train_id: Train identifier
         
     Returns:
-        Optional[str]: Alert ID if resolved, None otherwise
+        Optional[str]: Alert ID if deviation resolved, None otherwise
     """
     # Get current deviation status
     current_status = await detect_route_deviations(train_id)
     
-    if current_status.get("deviation_detected") is False:
-        # Check if we previously had a deviation alert
+    # If there's no currently detected deviation, check if there was a previous one
+    if not current_status.get("deviation_detected"):
+        # Find recent deviation alerts for this train
         train = await TrainModel.get_by_train_id(train_id)
         if not train:
             return None
             
-        # Look for recent deviation alerts for this train
-        # This is a simplified approach - in a real system you'd track alert state
         alerts = await AlertModel.get_by_recipient(str(train["_id"]))
-        for alert in alerts:
-            if "DEVIATION_WARNING" in alert.get("message", ""):
-                # Found a previous deviation alert - create resolution alert
-                message = f"DEVIATION_RESOLVED: Train {train_id} returned to route {train['current_route_id']}"
-                
-                # Alert for the train
-                train_alert_data = {
-                    "sender_ref": SYSTEM_SENDER_ID,
-                    "recipient_ref": str(train["_id"]),
-                    "message": message,
-                    "location": current_status.get("location"),
-                    "timestamp": get_current_ist_time()
-                }
-                alert_id = await AlertModel.create(train_alert_data, create_guest_copy=False)
-                
-                # Guest alert
-                guest_alert_data = {
-                    "sender_ref": SYSTEM_SENDER_ID,
-                    "recipient_ref": "680142cff8db812a8b87617d",  # Guest account ID
-                    "message": message,
-                    "location": current_status.get("location"),
-                    "timestamp": get_current_ist_time()
-                }
-                await AlertModel.create(guest_alert_data, create_guest_copy=False)
-                
-                return alert_id
+        
+        # Look for recent deviation alerts
+        deviation_alerts = [
+            alert for alert in alerts 
+            if "DEVIATION_WARNING" in alert.get("message", "") and "resolved" not in alert.get("message", "").lower()
+        ]
+        
+        # If there were deviation alerts, create a resolution alert
+        if deviation_alerts:
+            message = f"DEVIATION_RESOLVED: Train {train_id} is back on its assigned route"
+            
+            # Alert for the train
+            train_alert_data = {
+                "sender_ref": SYSTEM_SENDER_ID,
+                "recipient_ref": str(train["_id"]),
+                "message": message,
+                "location": current_status.get("location"),
+                "timestamp": get_current_utc_time()  # Changed from IST to UTC
+            }
+            alert_id = await AlertModel.create(train_alert_data, create_guest_copy=False)
+            
+            # Guest alert
+            guest_alert_data = {
+                "sender_ref": SYSTEM_SENDER_ID,
+                "recipient_ref": "680142cff8db812a8b87617d",  # Guest account ID
+                "message": message,
+                "location": current_status.get("location"),
+                "timestamp": get_current_utc_time()  # Changed from IST to UTC
+            }
+            await AlertModel.create(guest_alert_data, create_guest_copy=False)
+            
+            return alert_id
     
     return None

@@ -5,8 +5,8 @@ Defines business logic for alert management.
 from typing import Dict, Any, List, Optional
 from ..models.alert import AlertModel
 from ..models.train import TrainModel
-from app.config import get_current_ist_time
-from ..config import SYSTEM_SENDER_ID, GUEST_RECIPIENT_ID
+from app.config import get_current_utc_time, convert_to_ist, SYSTEM_SENDER_ID, GUEST_RECIPIENT_ID
+from app.utils import format_timestamp_ist
 
 class AlertService:
     """Alert service for business logic"""
@@ -35,7 +35,7 @@ class AlertService:
             "recipient_ref": str(train["_id"]),
             "message": message,
             "location": location,
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Always use UTC for storage
         }
         
         alert_id = await AlertModel.create(alert_data)
@@ -44,9 +44,9 @@ class AlertService:
             "success": True,
             "alert_id": alert_id,
             "recipient_id": recipient_id,
-            "timestamp": get_current_ist_time()
+            "timestamp": format_timestamp_ist(get_current_utc_time())  # Convert to IST for response
         }
-    
+
     @staticmethod
     async def generate_alert_summary(hours: int = 24) -> Dict[str, Any]:
         """
@@ -80,6 +80,7 @@ class AlertService:
             
             # Count by content (simplistic, would be better with categories field)
             message = alert.get("message", "").lower()
+            
             if "collision" in message:
                 collision_alerts += 1
             elif "deviat" in message:
@@ -119,7 +120,7 @@ class AlertService:
                 critical_alerts.append({
                     "id": alert.get("_id"),
                     "message": alert.get("message"),
-                    "timestamp": alert.get("timestamp"),
+                    "timestamp": alert.get("timestamp"),  # Will be converted to IST by the schema
                     "recipient_ref": alert.get("recipient_ref")
                 })
                 if len(critical_alerts) >= 5:  # Limit to 5 most recent
@@ -136,6 +137,6 @@ class AlertService:
             "by_severity": severity_counts,
             "by_recipient": recipient_counts,
             "recent_critical": critical_alerts,
-            "timestamp": get_current_ist_time(),
+            "timestamp": get_current_utc_time(),  # Will be converted to IST by the schema
             "period_hours": hours
         }

@@ -3,7 +3,7 @@ from app.models.train import TrainModel
 from app.models.log import LogModel
 from app.models.alert import AlertModel
 from app.utils import calculate_distance
-from app.config import DISTANCE_THRESHOLDS, SYSTEM_SENDER_ID, get_current_ist_time
+from app.config import DISTANCE_THRESHOLDS, SYSTEM_SENDER_ID, get_current_utc_time
 
 async def check_collision_risk(train1_id: str, train2_id: str) -> Dict[str, Any]:
     """
@@ -51,12 +51,6 @@ async def check_collision_risk(train1_id: str, train2_id: str) -> Dict[str, Any]
 async def create_collision_alert(collision_risk: Dict[str, Any]) -> str:
     """
     Create an alert for a potential collision
-    
-    Args:
-        collision_risk: Collision risk assessment
-        
-    Returns:
-        str: ID of the created alert
     """
     # Format the message according to the standard format
     message = f"COLLISION_WARNING: Potential collision risk between Train {collision_risk['train1_id']} and Train {collision_risk['train2_id']}"
@@ -74,7 +68,7 @@ async def create_collision_alert(collision_risk: Dict[str, Any]) -> str:
         "recipient_ref": str(train1["_id"]),
         "message": message,
         "location": collision_risk["location"],
-        "timestamp": get_current_ist_time()
+        "timestamp": get_current_utc_time()  # Changed from IST to UTC
     }
     alert1_id = await AlertModel.create(alert1_data, create_guest_copy=False)
     
@@ -84,7 +78,7 @@ async def create_collision_alert(collision_risk: Dict[str, Any]) -> str:
         "recipient_ref": str(train2["_id"]),
         "message": message,
         "location": collision_risk["location"],
-        "timestamp": get_current_ist_time()
+        "timestamp": get_current_utc_time()  # Changed from IST to UTC
     }
     await AlertModel.create(alert2_data, create_guest_copy=False)
     
@@ -94,7 +88,7 @@ async def create_collision_alert(collision_risk: Dict[str, Any]) -> str:
         "recipient_ref": "680142cff8db812a8b87617d",  # Guest account ID
         "message": message,
         "location": collision_risk["location"],
-        "timestamp": get_current_ist_time()
+        "timestamp": get_current_utc_time()  # Changed from IST to UTC
     }
     await AlertModel.create(guest_alert_data, create_guest_copy=False)
     

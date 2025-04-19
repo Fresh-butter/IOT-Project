@@ -4,7 +4,7 @@ Defines the structure and operations for route data in MongoDB.
 """
 from bson import ObjectId
 from app.database import get_collection
-from app.utils import round_coordinates
+from app.utils import round_coordinates, normalize_timestamp
 from typing import List, Optional, Dict, Any
 
 class RouteModel:
@@ -34,12 +34,16 @@ class RouteModel:
         if "assigned_train_ref" in route_data and route_data["assigned_train_ref"]:
             route_data["assigned_train_ref"] = ObjectId(route_data["assigned_train_ref"])
         
+        # Ensure start_time is normalized to UTC if present
+        if "start_time" in route_data and route_data["start_time"]:
+            route_data["start_time"] = normalize_timestamp(route_data["start_time"])
+        
         # Round coordinates in all checkpoints
         if "checkpoints" in route_data and route_data["checkpoints"]:
             for checkpoint in route_data["checkpoints"]:
                 if "location" in checkpoint and checkpoint["location"]:
                     checkpoint["location"] = round_coordinates(checkpoint["location"])
-            
+        
         result = await get_collection(RouteModel.collection).insert_one(route_data)
         return str(result.inserted_id)
 
@@ -71,6 +75,10 @@ class RouteModel:
                 update_data["assigned_train_ref"] = ObjectId(update_data["assigned_train_ref"])
             else:
                 update_data["assigned_train_ref"] = None
+
+        # Ensure start_time is normalized to UTC if being updated
+        if "start_time" in update_data and update_data["start_time"]:
+            update_data["start_time"] = normalize_timestamp(update_data["start_time"])
 
         # Round coordinates in all checkpoints
         if "checkpoints" in update_data and update_data["checkpoints"]:
@@ -151,7 +159,7 @@ class RouteModel:
         """
         results = await get_collection(RouteModel.collection).find({}).skip(skip).limit(limit).to_list(limit)
         return results
-        
+
     @staticmethod
     async def find_routes_with_rfid_tag(rfid_tag: str):
         """
@@ -177,7 +185,7 @@ class RouteModel:
         
         routes = await get_collection(RouteModel.collection).aggregate(pipeline).to_list(1000)
         return routes
-        
+
     @staticmethod
     async def assign_train(route_id: str, train_id: str, train_ref: str):
         """

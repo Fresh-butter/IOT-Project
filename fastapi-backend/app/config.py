@@ -68,7 +68,7 @@ TIME_THRESHOLDS = {
 MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "60"))
 LOG_CLEANUP_DAYS = int(os.getenv("LOG_CLEANUP_DAYS", "30"))
 
-# IST timezone settings
+# IST timezone settings (for response formatting)
 IST = timezone(timedelta(hours=5, minutes=30))
 
 # System identifiers for alerts
@@ -82,15 +82,26 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 # Monitoring settings
 MONITORING_ENABLED = os.getenv("MONITORING_ENABLED", "true").lower() == "true"
 
+def get_current_utc_time() -> datetime:
+    """
+    Get current time in UTC with timezone information
+    """
+    return datetime.now(timezone.utc)
+
+def convert_to_ist(utc_time: datetime) -> datetime:
+    """
+    Convert a UTC datetime to IST datetime
+    """
+    if utc_time.tzinfo is None:
+        utc_time = utc_time.replace(tzinfo=timezone.utc)
+    return utc_time.astimezone(IST)
+
 def get_current_ist_time() -> datetime:
     """
     Get current time in IST with explicit timezone information
     """
-    # Create timezone object for IST (UTC+5:30)
-    ist = timezone(timedelta(hours=5, minutes=30))
-    
-    # Get current time in IST
-    return datetime.now(ist)
+    # Get UTC time first, then convert to IST
+    return convert_to_ist(get_current_utc_time())
 
 def configure_logging():
     """Configure application logging based on settings"""

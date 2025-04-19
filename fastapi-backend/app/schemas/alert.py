@@ -2,10 +2,12 @@
 Alert schema module.
 Defines Pydantic models for alert data validation and serialization.
 """
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
+from bson import ObjectId
 from app.database import PyObjectId
+from app.utils import format_timestamp_ist, normalize_timestamp
 
 class AlertBase(BaseModel):
     sender_ref: str = Field(..., description="Reference to the sender")
@@ -16,7 +18,15 @@ class AlertBase(BaseModel):
 
     class Config:
         populate_by_name = True
-        json_encoders = {str: str}
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda dt: format_timestamp_ist(dt)
+        }
+
+    @validator("timestamp", pre=True)
+    def validate_timestamp(cls, value):
+        """Validates timestamp and normalizes to UTC for storage"""
+        return normalize_timestamp(value)
 
 class AlertCreate(AlertBase):
     pass
@@ -33,13 +43,20 @@ class AlertInDB(AlertBase):
     
     class Config:
         populate_by_name = True
-        json_encoders = {str: str}
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda dt: format_timestamp_ist(dt)
+        }
 
 class AlertResponse(AlertBase):
     id: str
     
     class Config:
         populate_by_name = True
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda dt: format_timestamp_ist(dt)
+        }
 
 class AlertSummary(BaseModel):
     total_alerts: int
@@ -54,3 +71,8 @@ class AlertSummary(BaseModel):
     recent_critical: List[dict] = []
     timestamp: datetime
     period_hours: int
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda dt: format_timestamp_ist(dt)
+        }

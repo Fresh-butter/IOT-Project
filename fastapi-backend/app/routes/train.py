@@ -6,10 +6,10 @@ from fastapi import APIRouter, HTTPException, status, Body, Path, Query, Depends
 from typing import List, Optional, Dict, Any
 from app.models.train import TrainModel
 from app.models.route import RouteModel
+from app.models.alert import AlertModel
 from app.schemas.train import TrainCreate, TrainUpdate, TrainInDB
-from app.utils import handle_exceptions
-from app.config import TRAIN_STATUS
-from app.database import safe_db_operation
+from app.utils import handle_exceptions, format_timestamp_ist
+from app.config import TRAIN_STATUS, SYSTEM_SENDER_ID, get_current_utc_time
 
 router = APIRouter()
 
@@ -96,10 +96,10 @@ async def update_train_status(
         raise HTTPException(status_code=404, detail=f"Train {id} not found")
     
     # Update status
+    old_status = train.get("current_status", "unknown")
     await TrainModel.update_status(id, status)
     
     # Create status change alert
-    old_status = train.get("current_status", "unknown")
     message = f"STATUS_CHANGED: Train {train['train_id']} status changed from {old_status} to {status}"
     
     # Alert for the train
@@ -107,7 +107,7 @@ async def update_train_status(
         "sender_ref": SYSTEM_SENDER_ID,
         "recipient_ref": str(train["_id"]),
         "message": message,
-        "timestamp": get_current_ist_time()
+        "timestamp": get_current_utc_time()  # Changed from IST to UTC
     }
     await AlertModel.create(train_alert_data, create_guest_copy=False)
     
@@ -116,7 +116,7 @@ async def update_train_status(
         "train_id": train["train_id"],
         "previous_status": old_status,
         "new_status": status,
-        "timestamp": get_current_ist_time()
+        "timestamp": format_timestamp_ist(get_current_utc_time())  # Format as IST for display
     }
 
 @router.delete("/{id}", 

@@ -9,8 +9,8 @@ import datetime as dt
 import logging
 
 from app.database import get_collection, safe_db_operation, PyObjectId
-from app.config import get_current_ist_time, SYSTEM_SENDER_ID, GUEST_RECIPIENT_ID
-from app.utils import round_coordinates
+from app.config import get_current_utc_time, SYSTEM_SENDER_ID, GUEST_RECIPIENT_ID
+from app.utils import round_coordinates, normalize_timestamp
 
 class AlertModel:
     collection = "alerts"
@@ -35,7 +35,7 @@ class AlertModel:
             return alerts
         
         return await safe_db_operation(operation, "Error retrieving alerts")
-    
+
     @staticmethod
     async def get_by_id(id: str):
         """Get an alert by ID"""
@@ -50,7 +50,7 @@ class AlertModel:
             return alert
         
         return await safe_db_operation(operation, "Error retrieving alert by ID")
-    
+
     @staticmethod
     async def get_by_recipient(recipient_id: str):
         """
@@ -85,7 +85,7 @@ class AlertModel:
             return alerts
         
         return await safe_db_operation(operation, "Error retrieving alerts by recipient")
-    
+
     @staticmethod
     async def create(alert_data: dict, create_guest_copy: bool = True):
         """
@@ -96,9 +96,12 @@ class AlertModel:
             create_guest_copy: Whether to create a copy for the guest account
         """
         async def operation():
-            # Ensure timestamp is set if not provided
+            # Ensure timestamp is set if not provided and normalized to UTC
             if "timestamp" not in alert_data:
-                alert_data["timestamp"] = get_current_ist_time()
+                alert_data["timestamp"] = get_current_utc_time()
+            else:
+                # If timestamp is provided, normalize it to UTC
+                alert_data["timestamp"] = normalize_timestamp(alert_data["timestamp"])
                 
             # Handle ID conversions if needed
             if "sender_ref" in alert_data and isinstance(alert_data["sender_ref"], str):
@@ -118,7 +121,7 @@ class AlertModel:
             # Round coordinates if location is present
             if "location" in alert_data and alert_data["location"]:
                 alert_data["location"] = round_coordinates(alert_data["location"])
-                
+            
             # Create the alert
             result = await get_collection(AlertModel.collection).insert_one(alert_data)
             alert_id = str(result.inserted_id)
@@ -137,7 +140,7 @@ class AlertModel:
             return alert_id
         
         return await safe_db_operation(operation, "Error creating alert")
-    
+
     @staticmethod
     async def update(id: str, alert_data: dict):
         """Update an alert"""
@@ -157,6 +160,10 @@ class AlertModel:
                     # Keep as string if it's not a valid ObjectId
                     pass
             
+            # If timestamp is being updated, normalize it to UTC
+            if "timestamp" in alert_data:
+                alert_data["timestamp"] = normalize_timestamp(alert_data["timestamp"])
+                
             # Round coordinates if location is present
             if "location" in alert_data and alert_data["location"]:
                 alert_data["location"] = round_coordinates(alert_data["location"])
@@ -229,7 +236,7 @@ class AlertModel:
             list: List of recent alert documents
         """
         async def operation():
-            time_threshold = get_current_ist_time() - dt.timedelta(hours=hours)
+            time_threshold = get_current_utc_time() - dt.timedelta(hours=hours)
             alerts = await get_collection(AlertModel.collection).find(
                 {"timestamp": {"$gte": time_threshold}}
             ).sort("timestamp", -1).to_list(1000)

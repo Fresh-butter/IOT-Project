@@ -8,16 +8,15 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from enum import Enum
 from app.database import PyObjectId
-from app.utils import normalize_timestamp, round_coordinates
+from app.utils import normalize_timestamp, round_coordinates, format_timestamp_ist
 
 class AccuracyCategory(str, Enum):
     """GPS accuracy categories based on HDOP and satellite count"""
-    EXCELLENT = "excellent"  # < 5 meter error
-    GOOD = "good"           # 5-10 meter error
-    MODERATE = "moderate"   # 10-25 meter error
-    POOR = "poor"           # > 25 meter error
-    VERY_POOR = "very_poor" # > 50 meter error
-    INVALID = "invalid"     # No GPS fix
+    EXCELLENT = "excellent"
+    GOOD = "good"
+    MODERATE = "moderate"
+    FAIR = "fair"
+    POOR = "poor"
 
 class LogBase(BaseModel):
     """
@@ -47,7 +46,7 @@ class LogBase(BaseModel):
     )
     timestamp: datetime = Field(
         ..., 
-        description="Timestamp of the log entry (in IST timezone)",
+        description="Timestamp of the log entry (stored as UTC, returned as IST)",
         example="2025-04-10T14:23:05+05:30"
     )
     accuracy: Optional[str] = Field(
@@ -63,19 +62,18 @@ class LogBase(BaseModel):
 
     @validator("timestamp", pre=True)
     def validate_timestamp(cls, value):
-        """Validates timestamp and preserves timezone information"""
+        """Validates timestamp and normalizes to UTC for storage"""
         if isinstance(value, str):
             try:
-                # Parse with timezone awareness - key fix!
-                # If string has timezone info like +05:30, it will be preserved
-                dt = datetime.fromisoformat(value)
-                return dt
+                # Parse with timezone awareness
+                dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                return normalize_timestamp(dt)
             except ValueError:
                 # For older formats or unparseable strings
                 pass
         
         # If already a datetime or needs default handling
-        return value
+        return normalize_timestamp(value)
 
     @validator('location')
     def validate_location(cls, v):
@@ -87,7 +85,7 @@ class LogBase(BaseModel):
     class Config:
         json_encoders = {
             ObjectId: str,
-            datetime: lambda dt: dt.isoformat()
+            datetime: lambda dt: format_timestamp_ist(dt)
         }
         schema_extra = {
             "example": {
@@ -129,7 +127,7 @@ class LogUpdate(BaseModel):
     )
     timestamp: Optional[datetime] = Field(
         None, 
-        description="Timestamp of the log entry (in IST timezone)",
+        description="Timestamp of the log entry (stored as UTC, returned as IST)",
         example="2025-04-10T14:23:05+05:30"
     )
     accuracy: Optional[str] = Field(
@@ -157,7 +155,10 @@ class LogInDB(LogBase):
 
     class Config:
         allow_population_by_field_name = True
-        json_encoders = {ObjectId: str}
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda dt: format_timestamp_ist(dt)
+        }
         schema_extra = {
             "example": {
                 "_id": "67e80645e4a58df990138c2b",

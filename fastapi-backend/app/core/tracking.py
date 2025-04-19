@@ -8,7 +8,7 @@ from app.models.route import RouteModel
 from app.models.log import LogOperations  # Changed from LogModel to LogOperations
 from app.models.alert import AlertModel
 from app.utils import calculate_distance
-from app.config import SYSTEM_SENDER_ID, TRAIN_STATUS, DISTANCE_THRESHOLDS, GUEST_RECIPIENT_ID, get_current_ist_time
+from app.config import SYSTEM_SENDER_ID, TRAIN_STATUS, DISTANCE_THRESHOLDS, GUEST_RECIPIENT_ID, get_current_ist_time, get_current_utc_time
 from app.core.location import detect_route_deviations, check_deviation_resolved
 
 async def get_active_trains_locations() -> List[Dict[str, Any]]:
@@ -94,7 +94,7 @@ async def detect_train_status_change(train_id: str, movement_threshold: float = 
             "recipient_ref": str(train["_id"]),
             "message": message,
             "location": logs[0]["location"],
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
         await AlertModel.create(train_alert_data, create_guest_copy=False)
         
@@ -104,7 +104,7 @@ async def detect_train_status_change(train_id: str, movement_threshold: float = 
             "recipient_ref": GUEST_RECIPIENT_ID,
             "message": message,
             "location": logs[0]["location"],
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
         await AlertModel.create(guest_alert_data, create_guest_copy=False)
         
@@ -123,7 +123,7 @@ async def detect_train_status_change(train_id: str, movement_threshold: float = 
             "recipient_ref": str(train["_id"]),
             "message": message,
             "location": logs[0]["location"],
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
         await AlertModel.create(train_alert_data, create_guest_copy=False)
         
@@ -133,7 +133,7 @@ async def detect_train_status_change(train_id: str, movement_threshold: float = 
             "recipient_ref": GUEST_RECIPIENT_ID,
             "message": message,
             "location": logs[0]["location"],
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
         await AlertModel.create(guest_alert_data, create_guest_copy=False)
     
@@ -203,11 +203,100 @@ async def update_train_progress(train_id: str, log_data: Dict[str, Any]) -> Dict
             "train_id": train_id,
             "status_changed": True,
             "new_status": status_change.get("new_status"),
-            "timestamp": get_current_ist_time()
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
         }
     
     return {
         "train_id": train_id,
         "status": "unchanged",
-        "timestamp": get_current_ist_time()
+        "timestamp": get_current_utc_time()  # Changed from IST to UTC
+    }
+
+async def check_route_deviation(train_id: str) -> Dict[str, Any]:
+    """
+    Check if the train has deviated from its route.
+    
+    Args:
+        train_id: Train identifier
+        
+    Returns:
+        Dict: Route deviation assessment
+    """
+    # Existing code...
+    
+    result = {
+        "train_id": train_id,
+        "current_position": current_position,
+        "closest_route_point": closest_point,
+        "distance_from_route": min_distance,
+        "deviation_detected": is_deviation,
+        "timestamp": get_current_utc_time(),  # Changed from IST to UTC
+        "threshold": DISTANCE_THRESHOLDS["ROUTE_DEVIATION"]
+    }
+    
+    # If deviation detected, create an alert
+    if is_deviation:
+        message = f"ROUTE_DEVIATION: Train {train_id} has deviated from route {train['active_route_id']} by {min_distance:.2f}m"
+        
+        # Create alert for the train
+        alert_data = {
+            "sender_ref": SYSTEM_SENDER_ID,
+            "recipient_ref": str(train["_id"]),
+            "message": message,
+            "location": current_position,
+            "timestamp": get_current_utc_time()  # Changed from IST to UTC
+        }
+        await AlertModel.create(alert_data)
+        
+        result["message"] = message
+    
+    return result
+
+async def check_schedule_adherence(train_id: str) -> Dict[str, Any]:
+    """
+    Check if the train is adhering to its schedule.
+    
+    Args:
+        train_id: Train identifier
+        
+    Returns:
+        Dict: Schedule adherence assessment
+    """
+    # Existing code...
+    
+    current_time = get_current_utc_time()  # Changed from IST to UTC
+    
+    # Remaining code...
+    
+    # When creating alerts:
+    alert_data = {
+        "sender_ref": SYSTEM_SENDER_ID,
+        "recipient_ref": str(train["_id"]),
+        "message": message,
+        "location": current_position,
+        "timestamp": get_current_utc_time()  # Changed from IST to UTC
+    }
+    
+    # Remaining code...
+
+async def update_train_status(train_id: str, force_check: bool = False) -> Dict[str, Any]:
+    """
+    Update the train's status based on various checks.
+    
+    Args:
+        train_id: Train identifier
+        force_check: Whether to force status check
+        
+    Returns:
+        Dict: Updated train status
+    """
+    # Existing code...
+    
+    # When creating alerts:
+    alert_data = {
+        "sender_ref": SYSTEM_SENDER_ID,
+        "recipient_ref": str(train["_id"]),
+        "message": message,
+        "location": latest_log.get("location") if latest_log else None,
+        "timestamp": get_current_utc_time()  # Changed from IST to UTC
     }

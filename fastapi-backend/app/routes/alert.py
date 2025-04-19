@@ -1,28 +1,28 @@
 """
 Alert routes module.
-Defines API endpoints for alert management.
+Defines API endpoints for alert operations.
 """
-from typing import List
-from fastapi import APIRouter, Body, Path, Query, status
+from fastapi import APIRouter, HTTPException, status, Body, Query, Path, Depends
+from typing import List, Optional, Dict, Any
+from datetime import datetime
 
-from ..models.alert import AlertModel
-from ..schemas.alert import AlertCreate, AlertUpdate, AlertInDB, AlertSummary
+from app.models.alert import AlertModel
+from app.schemas.alert import AlertCreate, AlertInDB, AlertUpdate, AlertSummary
+from app.config import SYSTEM_SENDER_ID, get_current_utc_time
 from app.utils import handle_exceptions
-from ..services.alert_service import AlertService
-from ..config import SYSTEM_SENDER_ID
 
-router = APIRouter(prefix="/alerts", tags=["Alerts"])
+router = APIRouter()
 
 @router.get("/", 
-           response_model=List[AlertInDB],
-           summary="Get all alerts",
-           description="Retrieve a list of all alerts in the system")
+            response_model=List[AlertInDB],
+            summary="Get all alerts",
+            description="Retrieve a list of all alerts with pagination")
 @handle_exceptions("retrieving alerts")
-async def get_all_alerts(
-    limit: int = Query(100, ge=1, description="Limit the number of results"),
-    skip: int = Query(0, ge=0, description="Skip the first N results")
+async def get_alerts(
+    skip: int = Query(0, ge=0, description="Number of alerts to skip"),
+    limit: int = Query(100, ge=1, description="Maximum number of alerts to return")
 ):
-    """Get all alerts"""
+    """Get all alerts with pagination"""
     alerts = await AlertModel.get_all(limit=limit, skip=skip)
     return alerts
 
@@ -34,33 +34,35 @@ async def get_all_alerts(
 async def get_alert(
     alert_id: str = Path(..., description="The ID of the alert to retrieve")
 ):
-    """Get alert by ID"""
+    """Get an alert by ID"""
     alert = await AlertModel.get_by_id(alert_id)
+    if not alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     return alert
 
-@router.get("/recipient/{recipient_ref}", 
+@router.get("/recipient/{recipient_id}", 
            response_model=List[AlertInDB],
            summary="Get alerts by recipient",
-           description="Retrieve all alerts for a specific recipient")
+           description="Retrieve alerts directed to a specific recipient")
 @handle_exceptions("retrieving alerts by recipient")
 async def get_alerts_by_recipient(
-    recipient_ref: str = Path(..., description="The reference ID of the recipient")
+    recipient_id: str = Path(..., description="The ID of the recipient")
 ):
-    """Get alerts by recipient reference"""
-    alerts = await AlertModel.get_by_recipient(recipient_ref)
+    """Get alerts by recipient"""
+    alerts = await AlertModel.get_by_recipient(recipient_id)
     return alerts
 
-@router.get("/sender/{sender_ref}", 
+@router.get("/sender/{sender_id}", 
            response_model=List[AlertInDB],
            summary="Get alerts by sender",
-           description="Retrieve all alerts from a specific sender")
+           description="Retrieve alerts sent by a specific sender")
 @handle_exceptions("retrieving alerts by sender")
 async def get_alerts_by_sender(
-    sender_ref: str = Path(..., description="The reference ID of the sender"),
+    sender_id: str = Path(..., description="The ID of the sender"),
     limit: int = Query(100, ge=1, description="Limit the number of results")
 ):
     """Get alerts by sender reference"""
-    alerts = await AlertModel.get_by_sender(sender_ref, limit=limit)
+    alerts = await AlertModel.get_by_sender(sender_id, limit)
     return alerts
 
 @router.post("/", 
@@ -109,15 +111,3 @@ async def delete_alert(
     """Delete an alert"""
     await AlertModel.delete(alert_id)
     return None
-#I don't need this request
-# @router.get("/summary/recent", 
-#            response_model=AlertSummary,
-#            summary="Get alert summary",
-#            description="Get summary statistics for recent alerts")
-# @handle_exceptions("generating alert summary")
-# async def get_alert_summary(
-#     hours: int = Query(24, ge=1, le=168, description="Number of hours to look back")
-# ):
-#     """Get summary of recent alerts"""
-#     summary = await AlertService.generate_alert_summary(hours)
-#     return summary
