@@ -86,14 +86,11 @@ def get_current_ist_time() -> datetime:
     """
     Get current time in IST with explicit timezone information
     """
-    # Get current UTC time first
-    now_utc = datetime.now(timezone.utc)
+    # Create timezone object for IST (UTC+5:30)
+    ist = timezone(timedelta(hours=5, minutes=30))
     
-    # Convert to IST timezone (UTC+05:30)
-    ist_offset = timedelta(hours=5, minutes=30)
-    now_ist = now_utc.astimezone(timezone(ist_offset))
-    
-    return now_ist
+    # Get current time in IST
+    return datetime.now(ist)
 
 def configure_logging():
     """Configure application logging based on settings"""

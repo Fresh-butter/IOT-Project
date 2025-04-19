@@ -48,28 +48,29 @@ class LogOperations:
     async def create(log_data: dict):
         """Create a new log entry with proper timezone handling"""
         async def operation():
-            # Ensure the timestamp is stored with timezone information
-            if "timestamp" in log_data and isinstance(log_data["timestamp"], datetime):
-                # Ensure the timestamp has timezone info
-                if log_data["timestamp"].tzinfo is None:
-                    # If no timezone, assume it's UTC and attach timezone
-                    log_data["timestamp"] = log_data["timestamp"].replace(tzinfo=timezone.utc)
+            # Make a copy to avoid modifying the original
+            log_data_copy = log_data.copy()
             
-            # Ensure we have a timestamp in IST
-            if "timestamp" not in log_data or log_data["timestamp"] is None:
-                log_data["timestamp"] = get_current_ist_time()
+            # Handle timestamp - normalize to IST
+            if "timestamp" in log_data_copy:
+                if log_data_copy["timestamp"] is None:
+                    log_data_copy["timestamp"] = get_current_ist_time()
+                else:
+                    log_data_copy["timestamp"] = normalize_timestamp(log_data_copy["timestamp"])
+            else:
+                log_data_copy["timestamp"] = get_current_ist_time()
                 
             # Convert train_ref string to ObjectId for MongoDB storage
-            if "train_ref" in log_data and isinstance(log_data["train_ref"], str):
-                log_data["train_ref"] = ObjectId(log_data["train_ref"])
+            if "train_ref" in log_data_copy and isinstance(log_data_copy["train_ref"], str):
+                log_data_copy["train_ref"] = ObjectId(log_data_copy["train_ref"])
             
             # Round coordinates if location is present
-            if "location" in log_data and log_data["location"]:
-                log_data["location"] = round_coordinates(log_data["location"])
+            if "location" in log_data_copy and log_data_copy["location"]:
+                log_data_copy["location"] = round_coordinates(log_data_copy["location"])
                 
-            result = await get_collection(LogOperations.collection).insert_one(log_data)
+            result = await get_collection(LogOperations.collection).insert_one(log_data_copy)
             return str(result.inserted_id)
-        
+            
         return await safe_db_operation(operation, "Error creating log")
 
     @staticmethod

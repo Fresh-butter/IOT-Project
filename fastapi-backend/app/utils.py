@@ -28,16 +28,43 @@ def round_coordinates(lat: Union[float, List[float], Tuple[float, float]], lon: 
 
 def normalize_timestamp(timestamp: Union[str, datetime]) -> datetime:
     """
-    Convert timestamp string to datetime object or return as is if already datetime
+    Convert timestamp string to datetime object with IST timezone
+    If already a datetime object, ensure it has IST timezone
     
     Args:
         timestamp: Timestamp as string or datetime object
         
     Returns:
-        Normalized datetime object
+        Normalized datetime object with IST timezone
     """
+    ist = timezone(timedelta(hours=5, minutes=30))
+    
     if isinstance(timestamp, str):
-        return datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        try:
+            # Parse string to datetime
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            
+            # If timezone is not specified, assume it's already IST
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ist)
+            # If timezone is specified but not IST, convert to IST
+            elif dt.tzinfo != ist:
+                dt = dt.astimezone(ist)
+                
+            return dt
+        except ValueError:
+            # For unparseable strings, return current IST time
+            return get_current_ist_time()
+            
+    # If already a datetime
+    if timestamp.tzinfo is None:
+        # If no timezone, assume IST
+        return timestamp.replace(tzinfo=ist)
+    elif timestamp.tzinfo != ist:
+        # If different timezone, convert to IST
+        return timestamp.astimezone(ist)
+        
+    # Already has IST timezone
     return timestamp
 
 def handle_exceptions(operation_name: str):
@@ -108,7 +135,6 @@ def custom_json_encoder(obj):
     """
     if isinstance(obj, datetime):
         # Format datetime with ISO 8601 format including timezone
-        # This ensures timezone info is preserved in API responses
         return obj.isoformat()
     if isinstance(obj, ObjectId):
         return str(obj)
