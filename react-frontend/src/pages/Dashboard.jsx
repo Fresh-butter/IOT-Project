@@ -1,10 +1,17 @@
 import React from 'react';
+import TrainMap from '../components/TrainMap'; // ✅ import the map
 
 const Dashboard = () => {
   return (
-    <div className="p-4">
-      <h2 className="text-2xl font-bold mb-4">Dashboard</h2>
-      <p>Welcome to the Train Collision Avoidance System Dashboard.</p>
+    <div>
+      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+
+      {/* Add whatever else is on your dashboard */}
+
+      <div className="mt-6">
+        <h2 className="text-xl font-semibold mb-2">Live Train Map</h2>
+        <TrainMap />
+      </div>
     </div>
   );
 };
