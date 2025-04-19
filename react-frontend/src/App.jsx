@@ -3,9 +3,9 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Dashboard from './pages/Dashboard';
-import ApiDocs from './pages/ApiDocs';
 import Trains from './pages/Trains';
-import RoutesPage from './pages/Routes'; // Import the Routes page
+import RoutesPage from './pages/Routes';
+import AlertsPage from './pages/Alerts'; // Import AlertsPage
 
 const App = () => {
   return (
@@ -15,8 +15,8 @@ const App = () => {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/trains" element={<Trains />} />
-          <Route path="/routes" element={<RoutesPage />} /> {/* Add this route */}
-          <Route path="/api-docs" element={<ApiDocs />} />
+          <Route path="/routes" element={<RoutesPage />} />
+          <Route path="/alerts" element={<AlertsPage />} /> {/* Add Alerts Route */}
         </Routes>
       </div>
       <Footer />
