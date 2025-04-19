@@ -6,7 +6,10 @@ import Footer from './components/Footer';
 import Dashboard from './pages/Dashboard';
 import Trains from './pages/Trains';
 import RoutesPage from './pages/Routes';
-import AlertsPage from './pages/Alerts'; // Import AlertsPage
+import AlertsPage from './pages/Alerts';
+import Analytics from './pages/Analytics'; // Import Analytics component
+
+
 
 const App = () => {
   return (
@@ -17,7 +20,8 @@ const App = () => {
           <Route path="/" element={<Dashboard />} />
           <Route path="/trains" element={<Trains />} />
           <Route path="/routes" element={<RoutesPage />} />
-          <Route path="/alerts" element={<AlertsPage />} /> {/* Add Alerts Route */}
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/analytics" element={<Analytics />} />
         </Routes>
       </div>
       <Footer />
