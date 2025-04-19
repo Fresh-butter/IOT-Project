@@ -82,9 +82,18 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 # Monitoring settings
 MONITORING_ENABLED = os.getenv("MONITORING_ENABLED", "true").lower() == "true"
 
-def get_current_ist_time():
-    """Returns current time in IST timezone"""
-    return datetime.now(IST)
+def get_current_ist_time() -> datetime:
+    """
+    Get current time in IST with explicit timezone information
+    """
+    # Get current UTC time first
+    now_utc = datetime.now(timezone.utc)
+    
+    # Convert to IST timezone (UTC+05:30)
+    ist_offset = timedelta(hours=5, minutes=30)
+    now_ist = now_utc.astimezone(timezone(ist_offset))
+    
+    return now_ist
 
 def configure_logging():
     """Configure application logging based on settings"""

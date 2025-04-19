@@ -4,7 +4,7 @@ Defines Pydantic models for log data validation and serialization.
 """
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 from enum import Enum
 from app.database import PyObjectId
@@ -63,17 +63,19 @@ class LogBase(BaseModel):
 
     @validator("timestamp", pre=True)
     def validate_timestamp(cls, value):
-        """Validates and normalizes timestamp to IST timezone"""
-        # Skip conversion if already in IST format
-        if isinstance(value, str) and "+05:30" in value:
+        """Validates timestamp and preserves timezone information"""
+        if isinstance(value, str):
             try:
-                # Just parse and return the timestamp as-is
-                return datetime.fromisoformat(value)
+                # Parse with timezone awareness - key fix!
+                # If string has timezone info like +05:30, it will be preserved
+                dt = datetime.fromisoformat(value)
+                return dt
             except ValueError:
+                # For older formats or unparseable strings
                 pass
         
-        # Otherwise, use the normalize function
-        return normalize_timestamp(value)
+        # If already a datetime or needs default handling
+        return value
 
     @validator('location')
     def validate_location(cls, v):

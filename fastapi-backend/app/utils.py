@@ -101,3 +101,18 @@ def calculate_distance(coord1, coord2):
     r = 6371000  # Earth radius in meters
     
     return c * r
+
+def custom_json_encoder(obj):
+    """
+    Custom JSON encoder to properly handle datetime objects with timezone
+    """
+    if isinstance(obj, datetime):
+        # Format datetime with ISO 8601 format including timezone
+        # This ensures timezone info is preserved in API responses
+        return obj.isoformat()
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+# Then include this in your FastAPI app initialization:
+# app = FastAPI(..., json_encoders={datetime: custom_json_encoder})
