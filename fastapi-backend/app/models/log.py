@@ -7,9 +7,41 @@ from datetime import datetime, timedelta
 from app.database import get_collection
 from app.config import get_current_ist_time
 from app.utils import round_coordinates
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union, Literal
+from pydantic import BaseModel, Field, root_validator
 
-class LogModel:
+class LogModel(BaseModel):
+    train_id: str
+    train_ref: str  
+    timestamp: str
+    rfid_tag: Optional[str] = None
+    location: Optional[Any] = None  # Changed from List[float] to Any to accept null
+    accuracy: str  # Changed from enum to str to accept any accuracy value
+    is_test: bool = False
+    
+    @root_validator(pre=True)
+    def validate_location(cls, values):
+        """
+        Custom validator to handle location field
+        - If location is null/None, keep it as None
+        - If location is a list with longitude and latitude, keep it as is
+        """
+        if 'location' in values and values['location'] is None:
+            # Allow null for location
+            pass
+        elif 'location' in values and isinstance(values['location'], list) and len(values['location']) == 2:
+            # Make sure both longitude and latitude are floats
+            values['location'] = [float(values['location'][0]), float(values['location'][1])]
+        
+        return values
+
+    class Config:
+        # Allow arbitrary types for validation
+        arbitrary_types_allowed = True
+        # This makes Pydantic use the field names as-is (case-sensitive)
+        populate_by_name = True
+
+class LogOperations:
     collection = "logs"
 
     @staticmethod
@@ -35,7 +67,7 @@ class LogModel:
         if "location" in log_data and log_data["location"]:
             log_data["location"] = round_coordinates(log_data["location"])
             
-        result = await get_collection(LogModel.collection).insert_one(log_data)
+        result = await get_collection(LogOperations.collection).insert_one(log_data)
         return str(result.inserted_id)
 
     @staticmethod
@@ -58,7 +90,7 @@ class LogModel:
         if "location" in update_data and update_data["location"]:
             update_data["location"] = round_coordinates(update_data["location"])
         
-        result = await get_collection(LogModel.collection).update_one(
+        result = await get_collection(LogOperations.collection).update_one(
             {"_id": ObjectId(id)},
             {"$set": update_data}
         )
@@ -75,7 +107,7 @@ class LogModel:
         Returns:
             dict: Log document or None if not found
         """
-        return await get_collection(LogModel.collection).find_one({"_id": ObjectId(id)})
+        return await get_collection(LogOperations.collection).find_one({"_id": ObjectId(id)})
 
     @staticmethod
     async def get_by_train_id(train_id: str, limit: int = 100):
@@ -89,7 +121,7 @@ class LogModel:
         Returns:
             list: List of log documents
         """
-        logs = await get_collection(LogModel.collection).find(
+        logs = await get_collection(LogOperations.collection).find(
             {"train_id": train_id}
         ).sort("timestamp", -1).limit(limit).to_list(limit)
         return logs
@@ -105,7 +137,7 @@ class LogModel:
         Returns:
             bool: True if deletion was successful, False otherwise
         """
-        result = await get_collection(LogModel.collection).delete_one({"_id": ObjectId(id)})
+        result = await get_collection(LogOperations.collection).delete_one({"_id": ObjectId(id)})
         return result.deleted_count > 0
 
     @staticmethod
@@ -125,7 +157,7 @@ class LogModel:
         if is_test is not None:
             filter_query["is_test"] = is_test
             
-        results = await get_collection(LogModel.collection).find(filter_query).sort(
+        results = await get_collection(LogOperations.collection).find(filter_query).sort(
             "timestamp", -1
         ).skip(skip).limit(limit).to_list(limit)
         return results
@@ -141,7 +173,7 @@ class LogModel:
         Returns:
             dict: Most recent log document or None if not found
         """
-        logs = await get_collection(LogModel.collection).find(
+        logs = await get_collection(LogOperations.collection).find(
             {"train_id": train_id}
         ).sort("timestamp", -1).limit(1).to_list(1)
         
@@ -159,7 +191,7 @@ class LogModel:
         Returns:
             list: List of log documents containing the specified RFID tag
         """
-        logs = await get_collection(LogModel.collection).find(
+        logs = await get_collection(LogOperations.collection).find(
             {"rfid_tag": rfid_tag}
         ).sort("timestamp", -1).limit(limit).to_list(limit)
         return logs
@@ -177,7 +209,7 @@ class LogModel:
         Returns:
             list: List of log documents within the specified time range
         """
-        logs = await get_collection(LogModel.collection).find({
+        logs = await get_collection(LogOperations.collection).find({
             "train_id": train_id,
             "timestamp": {
                 "$gte": start_time,
@@ -199,7 +231,7 @@ class LogModel:
             list: List of log documents from the last N hours
         """
         time_threshold = get_current_ist_time() - timedelta(hours=hours)
-        logs = await get_collection(LogModel.collection).find({
+        logs = await get_collection(LogOperations.collection).find({
             "train_id": train_id,
             "timestamp": {"$gte": time_threshold}
         }).sort("timestamp", 1).to_list(1000)

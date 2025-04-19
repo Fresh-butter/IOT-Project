@@ -13,7 +13,7 @@ from app.models.alert import AlertModel
 from app.core.collision import check_all_train_collisions
 from app.core.location import detect_route_deviations, check_deviation_resolved
 from app.core.tracking import detect_train_status_change, get_active_trains_locations
-from app.config import get_current_ist_time, MONITOR_INTERVAL_SECONDS
+from app.config import get_current_ist_time, MONITOR_INTERVAL_SECONDS, TRAIN_STATUS
 
 logger = logging.getLogger("app.tasks.monitor")
 

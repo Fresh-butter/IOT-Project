@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status, Body, Path, Query, Depends
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
-from app.models.log import LogModel
+from app.models.log import LogModel, LogOperations  # Add LogOperations here
 from app.models.train import TrainModel
 from app.schemas.log import LogCreate, LogUpdate, LogInDB
 from app.utils import handle_exceptions
@@ -40,8 +40,9 @@ async def create_log(
     if "timestamp" not in log_dict or log_dict["timestamp"] is None:
         log_dict["timestamp"] = get_current_ist_time()
         
-    log_id = await LogModel.create(log_dict)
-    created_log = await LogModel.get_by_id(log_id)
+    # Use LogOperations instead of LogModel
+    log_id = await LogOperations.create(log_dict)
+    created_log = await LogOperations.get_by_id(log_id)
     if not created_log:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
                           detail="Failed to retrieve created log")

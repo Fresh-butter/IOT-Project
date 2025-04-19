@@ -1,0 +1,387 @@
+#include <MFRC522v2.h>
+#include <MFRC522DriverSPI.h>
+#include <MFRC522DriverPinSimple.h>
+#include <MFRC522Debug.h>
+#include <TinyGPS++.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+
+// WiFi credentials
+const char* ssid = "Nav";       // Replace with your WiFi SSID
+const char* password = "Navneet123#"; // Replace with your WiFi password
+
+// API endpoint
+const char* apiEndpoint = "https://iot-project-c3wb.onrender.com/api/logs/";
+
+// Train identification (configure as needed)
+const char* TRAIN_ID = "205";
+const char* TRAIN_REF = "680296fc63fe290a1ff7e5c4";
+const bool IS_TEST = true;
+
+// Pin definitions
+#define RXD2 16
+#define TXD2 17
+#define GPS_BAUD 9600
+#define RFID_SS_PIN 5
+
+// Minimum satellites required for valid GPS data
+#define MIN_SATELLITES_FOR_VALID_DATA 3
+
+// RFID setup
+MFRC522DriverPinSimple ss_pin(RFID_SS_PIN);
+MFRC522DriverSPI driver{ss_pin};
+MFRC522 mfrc522{driver};
+
+// GPS setup
+TinyGPSPlus gps;
+HardwareSerial gpsSerial(2);
+
+// Data storage
+struct SensorData {
+  String rfidUid = "null";
+  float latitude = 0;
+  float longitude = 0;
+  float speed = 0;
+  float altitude = 0;
+  int satellites = 0;
+  float hdop = 0;
+  String dateTime = "";
+  String isoDateTime = "";  // ISO8601 format for API
+  
+  // Validity flags
+  bool rfidValid = false;
+  bool gpsValid = false;
+};
+
+SensorData sensorData;
+
+// Timing control
+unsigned long lastPrintTime = 0;
+unsigned long PRINT_INTERVAL = 6000; // Can be modified as needed
+unsigned long lastWifiCheckTime = 0;
+const unsigned long WIFI_CHECK_INTERVAL = 30000; // Check WiFi every 30 seconds
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial);
+  
+  // Initialize RFID
+  mfrc522.PCD_Init();
+  
+  // Initialize GPS
+  gpsSerial.begin(GPS_BAUD, SERIAL_8N1, RXD2, TXD2);
+  
+  // Wait for initial WiFi connection before proceeding
+  Serial.println("Waiting for WiFi connection...");
+  while (WiFi.status() != WL_CONNECTED) {
+    connectToWifi();
+    delay(5000); // Wait 5 seconds between connection attempts
+  }
+  
+  Serial.println("GPS, RFID Reader, and WiFi initialized successfully");
+}
+
+void loop() {
+  // Process RFID
+  readRfidCard();
+  
+  // Process GPS
+  readGpsData();
+  
+  // Check WiFi connection periodically
+  if (millis() - lastWifiCheckTime >= WIFI_CHECK_INTERVAL) {
+    if (WiFi.status() != WL_CONNECTED) {
+      connectToWifi();
+    }
+    lastWifiCheckTime = millis();
+  }
+  
+  // Print data and send to API at specified interval
+  if (millis() - lastPrintTime >= PRINT_INTERVAL) {
+    printCombinedData();
+    sendDataToAPI();
+    
+    // Reset RFID data if no new card was detected in this cycle
+    if (!sensorData.rfidValid) {
+      sensorData.rfidUid = "null";
+    }
+    sensorData.rfidValid = false;
+    
+    lastPrintTime = millis();
+  }
+}
+
+void connectToWifi() {
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+  
+  // Wait for connection - with timeout
+  unsigned long startAttemptTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("");
+    Serial.print("Connected to WiFi network with IP Address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("");
+    Serial.println("Failed to connect to WiFi. Will retry later.");
+  }
+}
+
+void readRfidCard() {
+  if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
+    sensorData.rfidUid = "";
+    for (byte i = 0; i < mfrc522.uid.size; i++) {
+      if (mfrc522.uid.uidByte[i] < 0x10) {
+        sensorData.rfidUid += "0"; 
+      }
+      sensorData.rfidUid += String(mfrc522.uid.uidByte[i], HEX);
+    }
+    sensorData.rfidValid = true;
+    mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
+  }
+}
+
+void readGpsData() {
+  while (gpsSerial.available() > 0) {
+    if (gps.encode(gpsSerial.read())) {
+      // Check if we have enough satellites for valid GPS data
+      sensorData.satellites = gps.satellites.isValid() ? gps.satellites.value() : 0;
+      sensorData.gpsValid = (sensorData.satellites >= MIN_SATELLITES_FOR_VALID_DATA);
+      
+      // Update location data
+      if (gps.location.isValid() && sensorData.gpsValid) {
+        sensorData.latitude = gps.location.lat();
+        sensorData.longitude = gps.location.lng();
+      }
+      
+      // Update speed data
+      if (gps.speed.isValid() && sensorData.gpsValid) {
+        sensorData.speed = gps.speed.kmph();
+      }
+      
+      // Update altitude data
+      if (gps.altitude.isValid() && sensorData.gpsValid) {
+        sensorData.altitude = gps.altitude.meters();
+      }
+      
+      // Update HDOP data
+      if (gps.hdop.isValid()) {
+        sensorData.hdop = gps.hdop.value() / 100.0;
+      }
+      
+      // Update date/time data - time can be valid even without good GPS fix
+      if (gps.date.isValid() && gps.time.isValid()) {
+        // Convert UTC to IST (UTC+5:30)
+        int year = gps.date.year();
+        int month = gps.date.month();
+        int day = gps.date.day();
+        int hour = gps.time.hour();
+        int minute = gps.time.minute();
+        int second = gps.time.second();
+
+        // Add 5 hours and 30 minutes for IST
+        hour = hour + 5;
+        minute = minute + 30;
+
+        // Handle minute overflow
+        if (minute >= 60) {
+          minute -= 60;
+          hour++;
+        }
+
+        // Handle hour overflow (day change)
+        if (hour >= 24) {
+          hour -= 24;
+          day++;
+          
+          // Handle month end cases (simplified)
+          int daysInMonth[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+          
+          // Adjust for leap year February
+          if (month == 2 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
+            daysInMonth[2] = 29;
+          }
+          
+          // Handle month rollover
+          if (day > daysInMonth[month]) {
+            day = 1;
+            month++;
+            
+            // Handle year rollover
+            if (month > 12) {
+              month = 1;
+              year++;
+            }
+          }
+        }
+
+        sensorData.dateTime = String(year) + "/" + 
+                              (month < 10 ? "0" : "") + String(month) + "/" + 
+                              (day < 10 ? "0" : "") + String(day) + "," + 
+                              (hour < 10 ? "0" : "") + String(hour) + ":" + 
+                              (minute < 10 ? "0" : "") + String(minute) + ":" + 
+                              (second < 10 ? "0" : "") + String(second) + " IST";
+        
+        // Create ISO8601 format for API: YYYY-MM-DDTHH:MM:SS+05:30
+        sensorData.isoDateTime = String(year) + "-" + 
+                                 (month < 10 ? "0" : "") + String(month) + "-" + 
+                                 (day < 10 ? "0" : "") + String(day) + "T" + 
+                                 (hour < 10 ? "0" : "") + String(hour) + ":" + 
+                                 (minute < 10 ? "0" : "") + String(minute) + ":" + 
+                                 (second < 10 ? "0" : "") + String(second) + "+05:30";
+      }
+    }
+  }
+}
+
+void printCombinedData() {
+  Serial.println("\n----- COMBINED DATA -----");
+  
+  // Print RFID data
+  Serial.print("RFID Card UID: ");
+  Serial.println(sensorData.rfidUid);
+  
+  // Print GPS data
+  Serial.println("GPS Data:");
+  Serial.print("  Satellites: "); 
+  Serial.println(sensorData.satellites);
+  
+  // Print GPS quality indicator
+  Serial.print("  GPS Fix Quality: ");
+  Serial.println(sensorData.gpsValid ? "Valid" : "Invalid");
+  
+  // Print location data
+  Serial.print("  Latitude: ");
+  Serial.println(sensorData.gpsValid ? String(sensorData.latitude, 5) : "null");
+  
+  Serial.print("  Longitude: "); 
+  Serial.println(sensorData.gpsValid ? String(sensorData.longitude, 5) : "null");
+  
+  // Print speed data
+  Serial.print("  Speed: ");
+  if (sensorData.gpsValid) {
+    Serial.print(sensorData.speed);
+    Serial.println(" km/h");
+  } else {
+    Serial.println("null");
+  }
+  
+  // Print altitude data
+  Serial.print("  Altitude: ");
+  if (sensorData.gpsValid) {
+    Serial.print(sensorData.altitude);
+    Serial.println(" meters");
+  } else {
+    Serial.println("null");
+  }
+  
+  // Print HDOP data
+  Serial.print("  HDOP: "); 
+  Serial.println(gps.hdop.isValid() ? String(sensorData.hdop) : "null");
+  
+  // Print date/time data - can be valid even without good GPS fix
+  Serial.print("  Date/Time: ");
+  Serial.println(gps.date.isValid() && gps.time.isValid() ? sensorData.dateTime : "null");
+  
+  Serial.println("-------------------------------------------\n");
+}
+
+void sendDataToAPI() {
+  // Check WiFi connection and attempt to reconnect if necessary
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected. Attempting to reconnect...");
+    connectToWifi();
+    
+    // If reconnection failed, skip API call
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("WiFi reconnection failed. Cannot send data to API.");
+      return;
+    }
+  }
+  
+  // Proceed regardless of GPS validity
+  HTTPClient http;
+  http.begin(apiEndpoint);
+  http.addHeader("Content-Type", "application/json");
+  
+  // Create JSON payload
+  StaticJsonDocument<512> jsonDoc;
+  jsonDoc["train_id"] = TRAIN_ID;
+  jsonDoc["train_ref"] = TRAIN_REF;
+  
+  // Use current time if GPS time is not valid
+  if (sensorData.isoDateTime.startsWith("2000-") || !gps.date.isValid()) {
+    // Generate current timestamp in ISO8601 format with IST timezone
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    now += 19800; // Add 5.5 hours (19800 seconds) for IST
+    gmtime_r(&now, &timeinfo);
+    
+    char timestamp[30];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S+05:30", &timeinfo);
+    jsonDoc["timestamp"] = timestamp;
+  } else {
+    jsonDoc["timestamp"] = sensorData.isoDateTime;
+  }
+  
+  jsonDoc["rfid_tag"] = sensorData.rfidUid != "null" ? sensorData.rfidUid : "RFID_" + String(TRAIN_ID) + "_B" + String(random(1, 5));
+  
+  // Handle location field based on GPS validity
+  if (sensorData.gpsValid) {
+    // Add location as array with valid GPS data
+    JsonArray locationArray = jsonDoc.createNestedArray("location");
+    locationArray.add(sensorData.longitude); // API format is [longitude, latitude]
+    locationArray.add(sensorData.latitude);
+  } else {
+    // For invalid GPS, use dummy coordinates instead of null values
+    JsonArray locationArray = jsonDoc.createNestedArray("location");
+    locationArray.add(77.2090); // Default longitude (near Delhi)
+    locationArray.add(28.6139); // Default latitude
+  }
+  
+  // Set accuracy based on HDOP or invalid for no GPS
+  String accuracy;
+  if (!sensorData.gpsValid) {
+    accuracy = "poor"; // Using "poor" instead of "invalid" 
+  } else if (sensorData.hdop < 1.0) {
+    accuracy = "excellent";
+  } else if (sensorData.hdop < 2.0) {
+    accuracy = "good";
+  } else if (sensorData.hdop < 5.0) {
+    accuracy = "moderate";
+  } else {
+    accuracy = "poor";
+  }
+  jsonDoc["accuracy"] = accuracy;
+  jsonDoc["is_test"] = IS_TEST;
+  
+  // Serialize JSON to string
+  String jsonPayload;
+  serializeJson(jsonDoc, jsonPayload);
+  
+  // Send the request
+  Serial.println("Sending data to API...");
+  Serial.println(jsonPayload);
+  
+  int httpResponseCode = http.POST(jsonPayload);
+  
+  if (httpResponseCode > 0) {
+    String response = http.getString();
+    Serial.println("HTTP Response code: " + String(httpResponseCode));
+    Serial.println("Response: " + response);
+  } else {
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
+    Serial.println("API request failed");
+  }
+  
+  http.end();
+}
