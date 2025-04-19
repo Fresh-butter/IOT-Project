@@ -64,6 +64,15 @@ class LogBase(BaseModel):
     @validator("timestamp", pre=True)
     def validate_timestamp(cls, value):
         """Validates and normalizes timestamp to IST timezone"""
+        # Skip conversion if already in IST format
+        if isinstance(value, str) and "+05:30" in value:
+            try:
+                # Just parse and return the timestamp as-is
+                return datetime.fromisoformat(value)
+            except ValueError:
+                pass
+        
+        # Otherwise, use the normalize function
         return normalize_timestamp(value)
 
     @validator('location')

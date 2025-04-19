@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <time.h> // Added for NTP time configuration
 
 // WiFi credentials
 const char* ssid = "Nav";       // Replace with your WiFi SSID
@@ -27,6 +28,11 @@ const bool IS_TEST = true;
 
 // Minimum satellites required for valid GPS data
 #define MIN_SATELLITES_FOR_VALID_DATA 3
+
+// NTP configuration
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 19800; // IST offset: 5 hours 30 minutes in seconds
+const int   daylightOffset_sec = 0; // No DST in India
 
 // RFID setup
 MFRC522DriverPinSimple ss_pin(RFID_SS_PIN);
@@ -71,6 +77,25 @@ void setup() {
   
   // Initialize GPS
   gpsSerial.begin(GPS_BAUD, SERIAL_8N1, RXD2, TXD2);
+  
+  // Configure NTP with IST offset (5:30)
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  
+  // Attempt initial time sync
+  Serial.println("Attempting to sync time...");
+  struct tm timeinfo;
+  int timeRetries = 0;
+  while(!getLocalTime(&timeinfo) && timeRetries < 5) {
+    Serial.print(".");
+    delay(1000);
+    timeRetries++;
+  }
+  
+  if(timeRetries < 5) {
+    Serial.println("\nTime synchronized with NTP server!");
+  } else {
+    Serial.println("\nFailed to sync time, will retry later");
+  }
   
   // Wait for initial WiFi connection before proceeding
   Serial.println("Waiting for WiFi connection...");
@@ -161,82 +186,20 @@ void readGpsData() {
         sensorData.longitude = gps.location.lng();
       }
       
-      // Update speed data
+      // Update speed and other data
       if (gps.speed.isValid() && sensorData.gpsValid) {
         sensorData.speed = gps.speed.kmph();
       }
       
-      // Update altitude data
       if (gps.altitude.isValid() && sensorData.gpsValid) {
         sensorData.altitude = gps.altitude.meters();
       }
       
-      // Update HDOP data
       if (gps.hdop.isValid()) {
         sensorData.hdop = gps.hdop.value() / 100.0;
       }
       
-      // Update date/time data - time can be valid even without good GPS fix
-      if (gps.date.isValid() && gps.time.isValid()) {
-        // Convert UTC to IST (UTC+5:30)
-        int year = gps.date.year();
-        int month = gps.date.month();
-        int day = gps.date.day();
-        int hour = gps.time.hour();
-        int minute = gps.time.minute();
-        int second = gps.time.second();
-
-        // Add 5 hours and 30 minutes for IST
-        hour = hour + 5;
-        minute = minute + 30;
-
-        // Handle minute overflow
-        if (minute >= 60) {
-          minute -= 60;
-          hour++;
-        }
-
-        // Handle hour overflow (day change)
-        if (hour >= 24) {
-          hour -= 24;
-          day++;
-          
-          // Handle month end cases (simplified)
-          int daysInMonth[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-          
-          // Adjust for leap year February
-          if (month == 2 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
-            daysInMonth[2] = 29;
-          }
-          
-          // Handle month rollover
-          if (day > daysInMonth[month]) {
-            day = 1;
-            month++;
-            
-            // Handle year rollover
-            if (month > 12) {
-              month = 1;
-              year++;
-            }
-          }
-        }
-
-        sensorData.dateTime = String(year) + "/" + 
-                              (month < 10 ? "0" : "") + String(month) + "/" + 
-                              (day < 10 ? "0" : "") + String(day) + "," + 
-                              (hour < 10 ? "0" : "") + String(hour) + ":" + 
-                              (minute < 10 ? "0" : "") + String(minute) + ":" + 
-                              (second < 10 ? "0" : "") + String(second) + " IST";
-        
-        // Create ISO8601 format for API: YYYY-MM-DDTHH:MM:SS+05:30
-        sensorData.isoDateTime = String(year) + "-" + 
-                                 (month < 10 ? "0" : "") + String(month) + "-" + 
-                                 (day < 10 ? "0" : "") + String(day) + "T" + 
-                                 (hour < 10 ? "0" : "") + String(hour) + ":" + 
-                                 (minute < 10 ? "0" : "") + String(minute) + ":" + 
-                                 (second < 10 ? "0" : "") + String(second) + "+05:30";
-      }
+      // We're not using GPS time anymore - removed time handling code
     }
   }
 }
@@ -293,6 +256,57 @@ void printCombinedData() {
   Serial.println("-------------------------------------------\n");
 }
 
+String getCurrentTimeIST() {
+  struct tm timeinfo;
+  char timeString[30];
+  
+  // Try to get time directly
+  if(!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain time, forcing NTP sync...");
+    
+    // Disconnect and reconnect to WiFi to ensure better NTP sync
+    if (WiFi.status() == WL_CONNECTED) {
+      WiFi.disconnect();
+      delay(1000);
+      connectToWifi();
+      delay(1000);
+    }
+    
+    // Force NTP resync
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    delay(2000); // Give more time for sync
+    
+    // Try again
+    if(!getLocalTime(&timeinfo)) {
+      return "unknown";
+    }
+  }
+  
+  // Simple verification of reasonable time
+  if(timeinfo.tm_year + 1900 < 2023) {
+    Serial.println("NTP returned invalid year: " + String(timeinfo.tm_year + 1900));
+    return "unknown";
+  }
+  
+  // Debug print raw time components
+  Serial.print("Raw time - Year: ");
+  Serial.print(timeinfo.tm_year + 1900);
+  Serial.print(", Month: ");
+  Serial.print(timeinfo.tm_mon + 1);
+  Serial.print(", Day: ");
+  Serial.print(timeinfo.tm_mday);
+  Serial.print(", Hour: ");
+  Serial.print(timeinfo.tm_hour);
+  Serial.print(", Minute: ");
+  Serial.print(timeinfo.tm_min);
+  Serial.print(", Second: ");
+  Serial.println(timeinfo.tm_sec);
+  
+  // Format as ISO8601 with IST timezone
+  strftime(timeString, sizeof(timeString), "%Y-%m-%dT%H:%M:%S+05:30", &timeinfo);
+  return String(timeString);
+}
+
 void sendDataToAPI() {
   // Check WiFi connection and attempt to reconnect if necessary
   if (WiFi.status() != WL_CONNECTED) {
@@ -316,23 +330,22 @@ void sendDataToAPI() {
   jsonDoc["train_id"] = TRAIN_ID;
   jsonDoc["train_ref"] = TRAIN_REF;
   
-  // Use current time if GPS time is not valid
-  if (sensorData.isoDateTime.startsWith("2000-") || !gps.date.isValid()) {
-    // Generate current timestamp in ISO8601 format with IST timezone
-    time_t now;
-    struct tm timeinfo;
-    time(&now);
-    now += 19800; // Add 5.5 hours (19800 seconds) for IST
-    gmtime_r(&now, &timeinfo);
-    
-    char timestamp[30];
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S+05:30", &timeinfo);
-    jsonDoc["timestamp"] = timestamp;
+  // Simplified timestamp handling
+  String currentTime = getCurrentTimeIST();
+  if(currentTime != "unknown") {
+    jsonDoc["timestamp"] = currentTime;
+    Serial.println("Sending timestamp: " + currentTime);
   } else {
-    jsonDoc["timestamp"] = sensorData.isoDateTime;
+    Serial.println("Warning: No valid time available");
+    jsonDoc["timestamp"] = "unavailable";
   }
   
-  jsonDoc["rfid_tag"] = sensorData.rfidUid != "null" ? sensorData.rfidUid : "RFID_" + String(TRAIN_ID) + "_B" + String(random(1, 5));
+  // Fix for the RFID null assignment
+  if (sensorData.rfidUid != "null") {
+    jsonDoc["rfid_tag"] = sensorData.rfidUid;
+  } else {
+    jsonDoc["rfid_tag"] = nullptr;
+  }
   
   // Handle location field based on GPS validity
   if (sensorData.gpsValid) {
@@ -341,10 +354,8 @@ void sendDataToAPI() {
     locationArray.add(sensorData.longitude); // API format is [longitude, latitude]
     locationArray.add(sensorData.latitude);
   } else {
-    // For invalid GPS, use dummy coordinates instead of null values
-    JsonArray locationArray = jsonDoc.createNestedArray("location");
-    locationArray.add(77.2090); // Default longitude (near Delhi)
-    locationArray.add(28.6139); // Default latitude
+    // For invalid GPS, use null value as per schema
+    jsonDoc["location"] = nullptr;
   }
   
   // Set accuracy based on HDOP or invalid for no GPS
