@@ -56,3 +56,5 @@ Starting the API with uvicorn
 Using Swagger UI at /docs to call the test endpoints
 Using hardware to publish GPS coordinates that will trigger alerts
 Examining the alerts in MongoDB or via the API
+
+I am now going to test my hardware with my backend code, before that let's do some final checks, first I want that my backend logic ignores any data which is test data true , second only those trains which are in_service running or in_service stopped needs to be tracked , so how my hardware works is that it first makes the train in_service_running and then it starts sending logs and then when it reaches the final checkpoint it again goes into maintenance mode 

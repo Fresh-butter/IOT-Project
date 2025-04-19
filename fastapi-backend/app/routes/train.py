@@ -77,6 +77,48 @@ async def update_train(
     updated_train = await TrainModel.get_by_id(id)
     return TrainInDB(**updated_train)
 
+@router.put("/{id}/status", 
+            response_model=Dict[str, Any],
+            summary="Update train status",
+            description="Update the operational status of a train")
+@handle_exceptions("updating train status")
+async def update_train_status(
+    id: str = Path(..., description="The ID of the train to update"),
+    status: str = Body(..., description="New status (in_service_running, in_service_not_running, maintenance, out_of_service)")
+):
+    """Update train operational status"""
+    # Validate status
+    if status not in TRAIN_STATUS.values():
+        raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+    
+    train = await TrainModel.get_by_id(id)
+    if not train:
+        raise HTTPException(status_code=404, detail=f"Train {id} not found")
+    
+    # Update status
+    await TrainModel.update_status(id, status)
+    
+    # Create status change alert
+    old_status = train.get("current_status", "unknown")
+    message = f"STATUS_CHANGED: Train {train['train_id']} status changed from {old_status} to {status}"
+    
+    # Alert for the train
+    train_alert_data = {
+        "sender_ref": SYSTEM_SENDER_ID,
+        "recipient_ref": str(train["_id"]),
+        "message": message,
+        "timestamp": get_current_ist_time()
+    }
+    await AlertModel.create(train_alert_data, create_guest_copy=False)
+    
+    return {
+        "id": id,
+        "train_id": train["train_id"],
+        "previous_status": old_status,
+        "new_status": status,
+        "timestamp": get_current_ist_time()
+    }
+
 @router.delete("/{id}", 
               response_model=Dict[str, str],
               summary="Delete a train",

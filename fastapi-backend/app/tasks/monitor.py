@@ -101,8 +101,17 @@ async def monitor_train_deviations():
     logger.info("Running route deviation check")
     
     try:
-        # Get all active trains
-        active_trains = await TrainModel.get_active_trains()
+        # Get all trains in either running or stopped state
+        valid_statuses = [
+            TRAIN_STATUS["IN_SERVICE_RUNNING"], 
+            TRAIN_STATUS["IN_SERVICE_NOT_RUNNING"]
+        ]
+        
+        active_trains = []
+        for status in valid_statuses:
+            trains = await TrainModel.get_all(status=status)
+            active_trains.extend(trains)
+        
         deviation_results = []
         
         for train in active_trains:

@@ -152,20 +152,42 @@ async def detect_train_status_change(train_id: str, movement_threshold: float = 
 
 async def update_train_progress(train_id: str, log_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Update train progress based on new log data
+    Update train progress based on new location data
     
     Args:
         train_id: Train identifier
-        log_data: New log entry data
+        log_data: Log data including location
         
     Returns:
-        Dict: Progress update result
+        Dict: Updated train status
     """
-    # Basic result structure
-    result = {
-        "train_id": train_id,
-        "progress_updated": False
-    }
+    # Ignore test data
+    if log_data.get("test_data") is True:
+        return {
+            "train_id": train_id,
+            "status": "ignored",
+            "reason": "Test data ignored"
+        }
+    
+    # Get train details
+    train = await TrainModel.get_by_train_id(train_id)
+    if not train:
+        return {
+            "train_id": train_id,
+            "status": "error",
+            "reason": "Train not found"
+        }
+    
+    # Only track trains that are in-service (running or not running)
+    current_status = train.get("current_status")
+    valid_statuses = [TRAIN_STATUS["IN_SERVICE_RUNNING"], TRAIN_STATUS["IN_SERVICE_NOT_RUNNING"]]
+    
+    if current_status not in valid_statuses:
+        return {
+            "train_id": train_id,
+            "status": "ignored",
+            "reason": f"Train status '{current_status}' is not being tracked"
+        }
     
     # First check for route deviations
     deviation = await detect_route_deviations(train_id)
@@ -177,11 +199,15 @@ async def update_train_progress(train_id: str, log_data: Dict[str, Any]) -> Dict
     # Check if train status (stopped/moving) has changed
     status_change = await detect_train_status_change(train_id)
     if status_change.get("status_changed"):
-        result["status_changed"] = True
-        result["new_status"] = status_change.get("new_status")
+        return {
+            "train_id": train_id,
+            "status_changed": True,
+            "new_status": status_change.get("new_status"),
+            "timestamp": get_current_ist_time()
+        }
     
-    # Mark progress as updated
-    result["progress_updated"] = True
-    result["timestamp"] = get_current_ist_time()
-    
-    return result
+    return {
+        "train_id": train_id,
+        "status": "unchanged",
+        "timestamp": get_current_ist_time()
+    }
