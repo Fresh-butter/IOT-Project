@@ -1,206 +1,173 @@
-"""
-Location utilities module.
-Provides functions for GPS and RFID data processing.
-"""
-from typing import List, Dict, Optional, Tuple, Any
-from datetime import datetime
-import math
-from app.utils import calculate_distance, round_coordinates
-from app.models.log import LogModel
+from typing import List, Dict, Any, Optional
+from app.models.train import TrainModel
 from app.models.route import RouteModel
+from app.models.log import LogModel
+from app.models.alert import AlertModel
+from app.utils import calculate_distance
+from app.config import DISTANCE_THRESHOLDS, SYSTEM_SENDER_ID, get_current_ist_time
 
-def is_point_near_line(point: List[float], line_start: List[float], line_end: List[float], 
-                       max_distance: float = 100.0) -> bool:
+async def calculate_distance_to_route(location: List[float], route_checkpoints: List[Dict]) -> float:
     """
-    Check if a point is within a specified distance of a line segment
+    Calculate minimum distance from a location to a route (defined by checkpoints)
     
     Args:
-        point: The point to check [longitude, latitude]
-        line_start: Starting point of the line segment [longitude, latitude]
-        line_end: Ending point of the line segment [longitude, latitude]
-        max_distance: Maximum distance in meters to consider "near"
+        location: [longitude, latitude] coordinates
+        route_checkpoints: List of checkpoint dictionaries with 'location' field
         
     Returns:
-        bool: True if the point is within max_distance of the line segment
+        float: Minimum distance in meters
     """
-    # Calculate distances
-    d_point_to_start = calculate_distance(point, line_start)
-    d_point_to_end = calculate_distance(point, line_end)
-    d_start_to_end = calculate_distance(line_start, line_end)
+    if not location or not route_checkpoints:
+        return float('inf')
     
-    # If either end of the line is very close to the point, return True
-    if d_point_to_start <= max_distance or d_point_to_end <= max_distance:
-        return True
-    
-    # Handle case where line segment is very short
-    if d_start_to_end < 1.0:
-        return d_point_to_start <= max_distance
-    
-    # Calculate the projection of the point onto the line segment
-    # using vector math to find the closest point on the line
-    t = ((point[0] - line_start[0]) * (line_end[0] - line_start[0]) + 
-         (point[1] - line_start[1]) * (line_end[1] - line_start[1])) / (d_start_to_end ** 2)
-    
-    # If t is outside [0,1], the closest point is one of the endpoints
-    if t < 0:
-        return d_point_to_start <= max_distance
-    if t > 1:
-        return d_point_to_end <= max_distance
-    
-    # Calculate the closest point on the line segment
-    closest_point = [
-        line_start[0] + t * (line_end[0] - line_start[0]),
-        line_start[1] + t * (line_end[1] - line_start[1])
-    ]
-    
-    # Calculate distance from the point to the closest point on the line
-    d_point_to_line = calculate_distance(point, closest_point)
-    
-    return d_point_to_line <= max_distance
-
-async def find_nearest_checkpoint(location: List[float], route_id: str) -> Tuple[Optional[Dict], int]:
-    """
-    Find the nearest checkpoint on a route to a given location
-    
-    Args:
-        location: Current location [longitude, latitude]
-        route_id: Route identifier
-        
-    Returns:
-        Tuple[Dict, int]: The nearest checkpoint and its index in the route's checkpoints list,
-                         or (None, -1) if route not found or has no checkpoints
-    """
-    route = await RouteModel.get_by_route_id(route_id)
-    if not route or not route.get("checkpoints"):
-        return None, -1
-    
-    checkpoints = route["checkpoints"]
-    nearest_checkpoint = None
-    nearest_index = -1
+    # Calculate distance to each line segment in the route
     min_distance = float('inf')
     
-    for i, checkpoint in enumerate(checkpoints):
-        checkpoint_location = checkpoint.get("location")
-        if not checkpoint_location:
+    for i in range(len(route_checkpoints) - 1):
+        cp1_loc = route_checkpoints[i].get("location")
+        cp2_loc = route_checkpoints[i + 1].get("location")
+        
+        if not cp1_loc or not cp2_loc:
             continue
-            
-        distance = calculate_distance(location, checkpoint_location)
-        if distance < min_distance:
-            min_distance = distance
-            nearest_checkpoint = checkpoint
-            nearest_index = i
+        
+        # Simple approach - find distance to each line segment
+        # by calculating distance to each endpoint
+        d1 = calculate_distance(location, cp1_loc)
+        d2 = calculate_distance(location, cp2_loc)
+        
+        segment_min = min(d1, d2)
+        min_distance = min(min_distance, segment_min)
     
-    return nearest_checkpoint, nearest_index
+    return min_distance
 
-async def get_expected_location(train_id: str, current_time: Optional[datetime] = None) -> Optional[List[float]]:
+async def detect_route_deviations(train_id: str, distance_threshold: float = None) -> Dict[str, Any]:
     """
-    Calculate expected location of a train based on its route and the elapsed time
+    Detect if a train has deviated from its assigned route
     
     Args:
         train_id: Train identifier
-        current_time: Time to calculate for (defaults to current time)
+        distance_threshold: Maximum allowed distance from route (meters)
         
     Returns:
-        List[float]: Expected [longitude, latitude] or None if not determinable
+        Dict: Route deviation assessment
     """
-    from app.models.train import TrainModel
-    
-    # Get train details
+    # Use configured threshold if none provided
+    if distance_threshold is None:
+        distance_threshold = DISTANCE_THRESHOLDS["ROUTE_DEVIATION"]
+        
     train = await TrainModel.get_by_train_id(train_id)
     if not train or not train.get("current_route_id"):
-        return None
+        return {
+            "train_id": train_id,
+            "deviation_detected": False,
+            "message": "No route assigned"
+        }
     
     # Get route details
     route = await RouteModel.get_by_route_id(train["current_route_id"])
-    if not route or not route.get("checkpoints") or len(route["checkpoints"]) < 2:
-        return None
+    if not route or not route.get("checkpoints"):
+        return {
+            "train_id": train_id,
+            "deviation_detected": False,
+            "message": "Route has no checkpoints"
+        }
     
-    # Get most recent log for actual location and time
+    # Get latest log entry with location data
     latest_log = await LogModel.get_latest_by_train(train_id)
-    if not latest_log or not latest_log.get("timestamp"):
-        return None
+    if not latest_log or not latest_log.get("location"):
+        return {
+            "train_id": train_id,
+            "deviation_detected": False,
+            "message": "No location data available"
+        }
     
-    log_time = latest_log["timestamp"]
-    if not current_time:
-        from app.config import get_current_ist_time
-        current_time = get_current_ist_time()
+    # Calculate distance from route
+    distance = await calculate_distance_to_route(latest_log["location"], route["checkpoints"])
     
-    # Calculate elapsed time since log in seconds
-    elapsed_seconds = (current_time - log_time).total_seconds()
+    # Determine if deviation exists
+    deviation_detected = distance > distance_threshold
     
-    # Find nearest checkpoint to last log position
-    if latest_log.get("location"):
-        nearest_checkpoint, checkpoint_idx = await find_nearest_checkpoint(
-            latest_log["location"], 
-            train["current_route_id"]
-        )
-    else:
-        return None
+    result = {
+        "train_id": train_id,
+        "deviation_detected": deviation_detected,
+        "distance_from_route": distance,
+        "location": latest_log["location"],
+        "timestamp": latest_log["timestamp"]
+    }
     
-    if nearest_checkpoint is None or checkpoint_idx == -1:
-        return None
+    # Create alert if deviation detected
+    if deviation_detected:
+        message = f"DEVIATION_WARNING: Train {train_id} deviated from route {train['current_route_id']} by {int(distance)}m"
+        
+        # Alert for the train
+        train_alert_data = {
+            "sender_ref": SYSTEM_SENDER_ID,
+            "recipient_ref": str(train["_id"]),
+            "message": message,
+            "location": latest_log["location"],
+            "timestamp": get_current_ist_time()
+        }
+        await AlertModel.create(train_alert_data, create_guest_copy=False)
+        
+        # Guest alert
+        guest_alert_data = {
+            "sender_ref": SYSTEM_SENDER_ID,
+            "recipient_ref": "680142cff8db812a8b87617d",  # Guest account ID
+            "message": message,
+            "location": latest_log["location"],
+            "timestamp": get_current_ist_time()
+        }
+        await AlertModel.create(guest_alert_data, create_guest_copy=False)
     
-    # If there's no next checkpoint, we can't interpolate
-    if checkpoint_idx >= len(route["checkpoints"]) - 1:
-        return route["checkpoints"][-1]["location"]
-    
-    current_checkpoint = route["checkpoints"][checkpoint_idx]
-    next_checkpoint = route["checkpoints"][checkpoint_idx + 1]
-    
-    # Calculate expected time between checkpoints
-    time_between_checkpoints = next_checkpoint["interval"] - current_checkpoint["interval"]
-    if time_between_checkpoints <= 0:
-        return current_checkpoint["location"]
-    
-    # Calculate progress ratio between checkpoints
-    progress_ratio = min(1.0, elapsed_seconds / time_between_checkpoints)
-    
-    # Interpolate location between checkpoints
-    current_loc = current_checkpoint["location"]
-    next_loc = next_checkpoint["location"]
-    
-    interpolated_location = [
-        current_loc[0] + progress_ratio * (next_loc[0] - current_loc[0]),
-        current_loc[1] + progress_ratio * (next_loc[1] - current_loc[1])
-    ]
-    
-    # Round to 5 decimal places
-    return round_coordinates(interpolated_location)
+    return result
 
-async def verify_rfid_checkpoint(rfid_tag: str, route_id: str, last_checkpoint_idx: int) -> Optional[Dict]:
+async def check_deviation_resolved(train_id: str) -> Optional[str]:
     """
-    Verify if an RFID tag matches the next expected checkpoint in a route
+    Check if a previously detected route deviation has been resolved
     
     Args:
-        rfid_tag: The RFID tag that was detected
-        route_id: Route identifier
-        last_checkpoint_idx: Index of the last confirmed checkpoint
+        train_id: Train identifier
         
     Returns:
-        Dict: The matching checkpoint or None if no match found
+        Optional[str]: Alert ID if resolved, None otherwise
     """
-    route = await RouteModel.get_by_route_id(route_id)
-    if not route or not route.get("checkpoints"):
-        return None
+    # Get current deviation status
+    current_status = await detect_route_deviations(train_id)
     
-    checkpoints = route["checkpoints"]
-    
-    # Calculate expected next checkpoint index
-    expected_idx = last_checkpoint_idx + 1
-    
-    # If we've reached the end of the route
-    if expected_idx >= len(checkpoints):
-        return None
-    
-    # Check if the RFID tag matches what's expected at the next checkpoint
-    expected_checkpoint = checkpoints[expected_idx]
-    if expected_checkpoint.get("rfid_tag") == rfid_tag:
-        return expected_checkpoint
-    
-    # If not, check if it matches any upcoming checkpoint within reasonable range
-    # (e.g., might have missed a checkpoint that didn't have an RFID tag)
-    for i in range(expected_idx + 1, min(expected_idx + 3, len(checkpoints))):
-        if checkpoints[i].get("rfid_tag") == rfid_tag:
-            return checkpoints[i]
+    if current_status.get("deviation_detected") is False:
+        # Check if we previously had a deviation alert
+        train = await TrainModel.get_by_train_id(train_id)
+        if not train:
+            return None
+            
+        # Look for recent deviation alerts for this train
+        # This is a simplified approach - in a real system you'd track alert state
+        alerts = await AlertModel.get_by_recipient(str(train["_id"]))
+        for alert in alerts:
+            if "DEVIATION_WARNING" in alert.get("message", ""):
+                # Found a previous deviation alert - create resolution alert
+                message = f"DEVIATION_RESOLVED: Train {train_id} returned to route {train['current_route_id']}"
+                
+                # Alert for the train
+                train_alert_data = {
+                    "sender_ref": SYSTEM_SENDER_ID,
+                    "recipient_ref": str(train["_id"]),
+                    "message": message,
+                    "location": current_status.get("location"),
+                    "timestamp": get_current_ist_time()
+                }
+                alert_id = await AlertModel.create(train_alert_data, create_guest_copy=False)
+                
+                # Guest alert
+                guest_alert_data = {
+                    "sender_ref": SYSTEM_SENDER_ID,
+                    "recipient_ref": "680142cff8db812a8b87617d",  # Guest account ID
+                    "message": message,
+                    "location": current_status.get("location"),
+                    "timestamp": get_current_ist_time()
+                }
+                await AlertModel.create(guest_alert_data, create_guest_copy=False)
+                
+                return alert_id
     
     return None

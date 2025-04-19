@@ -107,3 +107,20 @@
 ### Alert System Notes
 - System-generated alerts use a default sender_ref: "680142a4f8db812a8b87617c"
 - Every alert by system is sent to both the intended recipient train and to a "guest" account with recipient_ref: "680142cff8db812a8b87617d"
+
+### Standard System Alert Messages
+
+The system generates the following standard alert types:
+
+#### Collision Alerts
+- `COLLISION_WARNING: Potential collision risk between Train {train_id1} and Train {train_id2}`
+- `COLLISION_RESOLVED: Collision risk between Train {train_id1} and Train {train_id2} resolved`
+
+#### Route Deviation Alerts
+- `DEVIATION_WARNING: Train {train_id} deviated from route {route_id} by {distance}m`
+- `DEVIATION_RESOLVED: Train {train_id} returned to route {route_id}`
+
+#### System Status Alerts
+- `TRAIN_STOPPED: Train {train_id} stopped at {location}`
+- `TRAIN_RESUMED: Train {train_id} resumed operation`
+- `SYSTEM_WARNING: {custom_message}`

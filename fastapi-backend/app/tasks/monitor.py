@@ -1,298 +1,241 @@
 """
-Monitor tasks module.
-Provides background tasks for monitoring train positions, potential collisions,
-route deviations, and system health.
+Monitoring tasks module.
+Implements background tasks for system monitoring and automated alerts.
 """
 import asyncio
 import logging
-from typing import List, Dict, Any
 from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
 
 from app.models.train import TrainModel
 from app.models.log import LogModel
 from app.models.alert import AlertModel
-from app.models.route import RouteModel
 from app.core.collision import check_all_train_collisions
-from app.core.tracking import get_active_trains_locations, detect_route_deviations, is_train_on_schedule
-from app.config import get_current_ist_time, SYSTEM_SENDER_ID
+from app.core.location import detect_route_deviations, check_deviation_resolved
+from app.core.tracking import detect_train_status_change, get_active_trains_locations
+from app.config import get_current_ist_time, MONITOR_INTERVAL_SECONDS
 
-# Configure logging
-logger = logging.getLogger("monitor")
+logger = logging.getLogger("app.tasks.monitor")
+
+# Store previous collision risks for comparison
+previous_collision_risks = {}
+previous_deviations = {}
 
 async def monitor_train_collisions():
-    """
-    Monitor all active trains for potential collisions
+    """Check for collision risks between active trains"""
+    logger.info("Running collision detection check")
     
-    This task:
-    1. Checks for potential collisions between all active trains
-    2. Logs collision risks
-    3. Returns a list of detected collision risks
-    """
-    logger.info("Starting collision monitoring task")
     try:
+        # Get all active trains
         collision_risks = await check_all_train_collisions()
         
+        # Log results
         if collision_risks:
             logger.warning(f"Detected {len(collision_risks)} potential collision risks")
             for risk in collision_risks:
-                logger.warning(f"Collision risk between {risk['train1_id']} and {risk['train2_id']}: {risk['collision_risk']}")
+                logger.warning(f"Collision risk between Train {risk['train1_id']} and Train {risk['train2_id']}, distance: {risk['distance']}m")
         else:
             logger.info("No collision risks detected")
             
+        # Check for resolved collisions
+        global previous_collision_risks
+        risk_key = lambda risk: f"{risk['train1_id']}-{risk['train2_id']}"
+        
+        current_risk_keys = {risk_key(risk) for risk in collision_risks}
+        previous_risk_keys = set(previous_collision_risks.keys())
+        
+        # Find resolved risks
+        resolved_risks = previous_risk_keys - current_risk_keys
+        for risk_id in resolved_risks:
+            # Create resolution alert
+            risk = previous_collision_risks[risk_id]
+            message = f"COLLISION_RESOLVED: Collision risk between Train {risk['train1_id']} and Train {risk['train2_id']} resolved"
+            
+            # Get train references
+            train1 = await TrainModel.get_by_train_id(risk['train1_id'])
+            train2 = await TrainModel.get_by_train_id(risk['train2_id'])
+            
+            if train1 and train2:
+                # Alert for train 1
+                alert1_data = {
+                    "sender_ref": "680142a4f8db812a8b87617c",  # System sender ID
+                    "recipient_ref": str(train1["_id"]),
+                    "message": message,
+                    "location": risk["location"],
+                    "timestamp": get_current_ist_time()
+                }
+                await AlertModel.create(alert1_data, create_guest_copy=False)
+                
+                # Alert for train 2
+                alert2_data = {
+                    "sender_ref": "680142a4f8db812a8b87617c",  # System sender ID
+                    "recipient_ref": str(train2["_id"]),
+                    "message": message,
+                    "location": risk["location"],
+                    "timestamp": get_current_ist_time()
+                }
+                await AlertModel.create(alert2_data, create_guest_copy=False)
+                
+                # Guest alert
+                guest_alert_data = {
+                    "sender_ref": "680142a4f8db812a8b87617c",  # System sender ID
+                    "recipient_ref": "680142cff8db812a8b87617d",  # Guest account ID
+                    "message": message,
+                    "location": risk["location"],
+                    "timestamp": get_current_ist_time()
+                }
+                await AlertModel.create(guest_alert_data, create_guest_copy=False)
+                
+                logger.info(f"Created resolution alert for {risk_id}")
+        
+        # Update previous risks
+        previous_collision_risks = {risk_key(risk): risk for risk in collision_risks}
+        
         return collision_risks
     except Exception as e:
-        logger.error(f"Error in collision monitoring task: {str(e)}")
+        logger.error(f"Error in collision monitoring: {str(e)}")
         return []
 
-# Update monitor_train_deviations function to use AlertService
 async def monitor_train_deviations():
-    """
-    Monitor all active trains for route deviations
-    
-    This task:
-    1. Checks if trains have deviated from their assigned routes
-    2. Creates alerts for significant deviations using AlertService
-    3. Returns a list of detected deviations
-    """
-    from app.services.alert_service import AlertService
-    
-    logger.info("Starting route deviation monitoring task")
-    deviations = []
+    """Check for route deviations for all active trains"""
+    logger.info("Running route deviation check")
     
     try:
+        # Get all active trains
         active_trains = await TrainModel.get_active_trains()
+        deviation_results = []
         
         for train in active_trains:
-            deviation_assessment = await detect_route_deviations(train["train_id"])
+            train_id = train["train_id"]
+            deviation = await detect_route_deviations(train_id)
             
-            if deviation_assessment["deviation_detected"]:
-                logger.warning(f"Train {train['train_id']} has deviated from its route: {deviation_assessment['severity']} severity")
-                deviations.append(deviation_assessment)
-                
-                # Create an alert for significant deviations using AlertService
-                if deviation_assessment["severity"] in ["moderate", "high", "critical"]:
-                    # Create message based on severity
-                    if deviation_assessment["severity"] == "critical":
-                        message = f"CRITICAL: Train {train['train_id']} has severely deviated from its route. Distance from route: {int(deviation_assessment['distance_from_route'])}m."
-                    elif deviation_assessment["severity"] == "high":
-                        message = f"HIGH ALERT: Train {train['train_id']} has significantly deviated from its route. Distance from route: {int(deviation_assessment['distance_from_route'])}m."
-                    else:
-                        message = f"WARNING: Train {train['train_id']} has moderately deviated from its route. Distance from route: {int(deviation_assessment['distance_from_route'])}m."
-                    
-                    # Use alert service to create the alert
-                    alert_result = await AlertService.create_system_alert(
-                        train["train_id"],
-                        message,
-                        deviation_assessment["location"]
-                    )
-                    
-                    if alert_result.get("success"):
-                        logger.info(f"Created deviation alert {alert_result.get('alert_id')} for train {train['train_id']}")
+            if deviation.get("deviation_detected"):
+                logger.warning(f"Train {train_id} deviation detected: {deviation.get('distance_from_route')}m")
+                deviation_results.append(deviation)
+            
+            # Check if previous deviation is now resolved
+            global previous_deviations
+            if train_id in previous_deviations and previous_deviations[train_id].get("deviation_detected"):
+                if not deviation.get("deviation_detected"):
+                    await check_deviation_resolved(train_id)
+                    logger.info(f"Train {train_id} deviation resolved")
+            
+            # Update previous deviation status
+            previous_deviations[train_id] = deviation
         
-        if not deviations:
-            logger.info("No route deviations detected")
-            
-        return deviations
+        return deviation_results
     except Exception as e:
-        logger.error(f"Error in route deviation monitoring task: {str(e)}")
+        logger.error(f"Error in route deviation monitoring: {str(e)}")
         return []
 
-async def monitor_train_schedules():
-    """
-    Monitor all active trains for schedule adherence
-    
-    This task:
-    1. Checks if trains are running on schedule
-    2. Creates alerts for trains that are significantly delayed
-    3. Returns a list of train schedule statuses
-    """
-    from app.services.alert_service import AlertService
-    
-    logger.info("Starting schedule monitoring task")
-    schedule_statuses = []
+async def monitor_train_status():
+    """Check for train status changes (stopped/resumed)"""
+    logger.info("Running train status check")
     
     try:
+        # Get all active trains
         active_trains = await TrainModel.get_active_trains()
+        status_changes = []
         
         for train in active_trains:
-            schedule_info = await is_train_on_schedule(train["train_id"])
-            schedule_statuses.append(schedule_info)
+            train_id = train["train_id"]
+            status = await detect_train_status_change(train_id)
             
-            # Create alerts for trains that are significantly delayed (over 5 minutes)
-            if not schedule_info["on_schedule"] and schedule_info["delay_seconds"] and schedule_info["delay_seconds"] > 300:
-                delay_minutes = int(schedule_info["delay_seconds"] / 60)
-                
-                message = f"Schedule alert: Train {train['train_id']} is running approximately {delay_minutes} minutes behind schedule."
-                
-                # Use AlertService instead of direct model access
-                alert_result = await AlertService.create_system_alert(
-                    train["train_id"],
-                    message,
-                    schedule_info.get("location")
-                )
-                
-                if alert_result.get("success"):
-                    logger.info(f"Created schedule delay alert {alert_result.get('alert_id')} for train {train['train_id']}")
+            if status.get("status_changed"):
+                logger.info(f"Train {train_id} status changed to {status.get('new_status')}")
+                status_changes.append(status)
         
-        if schedule_statuses:
-            on_schedule_count = sum(1 for status in schedule_statuses if status.get("on_schedule"))
-            logger.info(f"{on_schedule_count} of {len(schedule_statuses)} trains running on schedule")
-        else:
-            logger.info("No trains with schedule information found")
-            
-        return schedule_statuses
+        return status_changes
     except Exception as e:
-        logger.error(f"Error in schedule monitoring task: {str(e)}")
+        logger.error(f"Error in train status monitoring: {str(e)}")
         return []
 
-async def clean_old_logs(days_to_keep: int = 30):
-    """
-    Remove logs older than the specified number of days
-    
-    Args:
-        days_to_keep: Number of days of logs to retain
-    """
-    logger.info(f"Starting log cleanup task (keeping {days_to_keep} days of logs)")
+async def generate_system_status_report() -> Dict[str, Any]:
+    """Generate a comprehensive system status report"""
     try:
-        threshold_date = get_current_ist_time() - timedelta(days=days_to_keep)
-        
-        # Use the database directly for bulk operations
-        from app.database import get_collection
-        result = await get_collection(LogModel.collection).delete_many(
-            {"timestamp": {"$lt": threshold_date}}
-        )
-        
-        logger.info(f"Removed {result.deleted_count} old log entries")
-        return result.deleted_count
-    except Exception as e:
-        logger.error(f"Error in log cleanup task: {str(e)}")
-        return 0
-
-async def generate_system_status_report():
-    """
-    Generate a system status report with key metrics
-    
-    This task:
-    1. Collects statistics about trains, routes, and recent logs
-    2. Checks for potential issues
-    3. Returns a comprehensive status report
-    """
-    logger.info("Generating system status report")
-    
-    try:
-        current_time = get_current_ist_time()
-        
-        # Get counts of various entities
-        from app.database import get_collection
-        train_count = await get_collection(TrainModel.collection).count_documents({})
-        route_count = await get_collection(RouteModel.collection).count_documents({})
-        active_train_count = len(await TrainModel.get_active_trains())
-        
-        # Get log counts for recent activity
-        last_hour_logs = await get_collection(LogModel.collection).count_documents(
-            {"timestamp": {"$gte": current_time - timedelta(hours=1)}}
-        )
-        
-        last_day_logs = await get_collection(LogModel.collection).count_documents(
-            {"timestamp": {"$gte": current_time - timedelta(days=1)}}
-        )
-        
-        # Get alert counts for recent alerts
-        open_alerts = await get_collection(AlertModel.collection).count_documents(
-            {"timestamp": {"$gte": current_time - timedelta(days=1)}}
-        )
-        
         # Get active trains locations
-        active_train_locations = await get_active_trains_locations()
+        train_locations = await get_active_trains_locations()
         
-        # Check for collision risks
-        collision_risks = await check_all_train_collisions()
+        # Get recent alerts (last 5)
+        recent_alerts = await AlertModel.get_recent_alerts(hours=6)
+        recent_alerts_sample = recent_alerts[:5] if recent_alerts else []
         
-        report = {
-            "timestamp": current_time,
-            "total_trains": train_count,
-            "total_routes": route_count,
-            "active_trains": active_train_count,
-            "logs_last_hour": last_hour_logs,
-            "logs_last_day": last_day_logs,
-            "open_alerts": open_alerts,
-            "active_train_locations": active_train_locations,
-            "collision_risks": collision_risks,
-            "system_health": "normal"
+        # Count alerts by type
+        alert_types = {
+            "collision_warnings": 0,
+            "deviation_warnings": 0,
+            "status_changes": 0,
+            "other": 0
         }
         
-        # Determine system health based on collected metrics
-        if collision_risks:
-            report["system_health"] = "warning"
-            
-        if active_train_count > 0 and last_hour_logs == 0:
-            # No recent logs despite active trains - could indicate communication issues
-            report["system_health"] = "error"
-            logger.warning("No recent logs despite active trains - possible communication issues")
+        for alert in recent_alerts:
+            message = alert.get("message", "").upper()
+            if "COLLISION_WARNING" in message:
+                alert_types["collision_warnings"] += 1
+            elif "DEVIATION_WARNING" in message:
+                alert_types["deviation_warnings"] += 1
+            elif "TRAIN_STOPPED" in message or "TRAIN_RESUMED" in message:
+                alert_types["status_changes"] += 1
+            else:
+                alert_types["other"] += 1
         
-        logger.info(f"System status report generated: health={report['system_health']}")
+        # Get recent logs (last 20)
+        recent_logs = []
+        for train_loc in train_locations:
+            train_id = train_loc.get("train_id")
+            if train_id:
+                logs = await LogModel.get_by_train_id(train_id, limit=3)
+                recent_logs.extend(logs)
+        
+        # Create the report
+        report = {
+            "timestamp": get_current_ist_time(),
+            "active_trains_count": len(train_locations),
+            "active_trains": train_locations,
+            "recent_alerts": {
+                "count": len(recent_alerts),
+                "by_type": alert_types,
+                "samples": recent_alerts_sample
+            },
+            "recent_logs_count": len(recent_logs),
+            "system_status": "operational"
+        }
+        
         return report
     except Exception as e:
         logger.error(f"Error generating system status report: {str(e)}")
         return {
             "timestamp": get_current_ist_time(),
             "error": str(e),
-            "system_health": "unknown"
+            "system_status": "error"
         }
 
-async def run_all_monitoring_tasks():
-    """
-    Run all monitoring tasks sequentially
-    """
-    logger.info("Running all monitoring tasks")
-    
-    try:
-        # Run tasks in sequence
-        await monitor_train_collisions()
-        await monitor_train_deviations()
-        await monitor_train_schedules()
-        await generate_system_status_report()
-        
-        # Periodically clean old logs (e.g., once a day)
-        # This is commented out to prevent accidental data loss during development
-        # Uncomment in production with appropriate days_to_keep value
-        # current_hour = get_current_ist_time().hour
-        # if current_hour == 3:  # Run at 3 AM
-        #     await clean_old_logs(days_to_keep=30)
-        
-        logger.info("All monitoring tasks completed successfully")
-    except Exception as e:
-        logger.error(f"Error running monitoring tasks: {str(e)}")
-
-# This function would be called from a background task scheduler
 async def start_monitoring(interval_seconds: int = 60, stop_event=None):
     """
-    Start the monitoring tasks with the specified interval
+    Start background monitoring tasks with specified interval
     
     Args:
-        interval_seconds: Interval between monitoring runs in seconds
-        stop_event: An asyncio.Event that signals when to stop monitoring
+        interval_seconds: How often to run monitoring tasks (in seconds)
+        stop_event: Event to signal task termination
     """
-    logger.info(f"Starting monitoring system with {interval_seconds}s interval")
+    logger.info(f"Starting background monitoring with {interval_seconds}s interval")
     
     while True:
-        if stop_event and stop_event.is_set():
-            logger.info("Stopping monitoring system due to stop event")
-            break
+        try:
+            if stop_event and stop_event.is_set():
+                logger.info("Stop event detected, terminating monitoring")
+                break
+                
+            # Run all monitoring tasks
+            await monitor_train_collisions()
+            await monitor_train_deviations()
+            await monitor_train_status()
             
-        await run_all_monitoring_tasks()
-        
-        # Use wait_for with timeout to allow checking the stop event more frequently
-        if stop_event:
-            try:
-                await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
-                if stop_event.is_set():
-                    logger.info("Stopping monitoring system due to stop event")
-                    break
-            except asyncio.TimeoutError:
-                # Timeout is expected, continue with next iteration
-                pass
-        else:
+            # Wait for next interval
             await asyncio.sleep(interval_seconds)
-            
-    logger.info("Monitoring system stopped")
+        except Exception as e:
+            logger.error(f"Error in monitoring loop: {str(e)}")
+            # Continue despite errors
+            await asyncio.sleep(interval_seconds)
+    
+    logger.info("Background monitoring stopped")

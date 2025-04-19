@@ -47,8 +47,8 @@ ALERT_SEVERITY = {
 
 # Distance thresholds (in meters)
 DISTANCE_THRESHOLDS = {
-    "COLLISION_CRITICAL": 100,    # Critical collision risk if trains are within 100m
-    "COLLISION_WARNING": 500,     # Warning collision risk if trains are within 500m
+    "COLLISION_CRITICAL": 50,     # Critical collision risk if trains are within 50m
+    "COLLISION_WARNING": 100,     # Warning collision risk if trains are within 100m (was 500m)
     "ROUTE_DEVIATION": 100,       # Route deviation if train is 100m from expected path
     "CHECKPOINT_PROXIMITY": 50    # Train is considered at checkpoint if within 50m
 }
@@ -56,8 +56,6 @@ DISTANCE_THRESHOLDS = {
 # Direct distance constants for backward compatibility
 COLLISION_CRITICAL_DISTANCE = DISTANCE_THRESHOLDS["COLLISION_CRITICAL"]
 COLLISION_WARNING_DISTANCE = DISTANCE_THRESHOLDS["COLLISION_WARNING"]
-ROUTE_DEVIATION_DISTANCE = DISTANCE_THRESHOLDS["ROUTE_DEVIATION"]
-CHECKPOINT_PROXIMITY_DISTANCE = DISTANCE_THRESHOLDS["CHECKPOINT_PROXIMITY"]
 
 # Time thresholds (in seconds)
 TIME_THRESHOLDS = {

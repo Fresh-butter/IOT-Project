@@ -9,7 +9,6 @@ from bson import ObjectId
 from app.models.route import RouteModel
 from app.models.train import TrainModel
 from app.models.log import LogModel
-from app.core.collision import analyze_route_collision_risks
 from app.config import get_current_ist_time
 
 class RouteService:
@@ -67,7 +66,7 @@ class RouteService:
                     })
         
         # Check for potential collision risks on this route
-        collision_risks = await analyze_route_collision_risks(route_id)
+        collision_risks = []  # Empty list as placeholder
         
         # Combine all information
         result = {

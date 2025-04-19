@@ -204,3 +204,80 @@ class LogModel:
             "timestamp": {"$gte": time_threshold}
         }).sort("timestamp", 1).to_list(1000)
         return logs
+
+    @classmethod
+    async def get_logs_since(cls, timestamp):
+        """
+        Get all logs since the specified timestamp
+        
+        Args:
+            timestamp (datetime): The timestamp to query logs from
+            
+        Returns:
+            list: List of log documents
+        """
+        from app.database import get_collection
+        logs = await get_collection(cls.collection).find({
+            "timestamp": {"$gte": timestamp}
+        }).to_list(length=None)
+        
+        return logs
+
+    @classmethod
+    async def get_logs_by_train_since(cls, train_id, timestamp):
+        """
+        Get logs for a specific train since the specified timestamp
+        
+        Args:
+            train_id (str): The train ID to filter logs
+            timestamp (datetime): The timestamp to query logs from
+            
+        Returns:
+            list: List of log documents for the specified train
+        """
+        from app.database import get_collection
+        logs = await get_collection(cls.collection).find({
+            "train_id": train_id,
+            "timestamp": {"$gte": timestamp}
+        }).sort("timestamp", 1).to_list(length=None)
+        
+        return logs
+
+    @classmethod
+    async def count_logs_since(cls, timestamp):
+        """
+        Count logs since the specified timestamp
+        
+        Args:
+            timestamp (datetime): The timestamp to query logs from
+            
+        Returns:
+            int: Count of logs
+        """
+        from app.database import get_collection
+        count = await get_collection(cls.collection).count_documents({
+            "timestamp": {"$gte": timestamp}
+        })
+        
+        return count
+
+    @classmethod
+    async def get_latest_log_for_each_train(cls):
+        """
+        Get the latest log entry for each train
+        
+        Returns:
+            list: Latest log document for each train
+        """
+        from app.database import get_collection
+        pipeline = [
+            {"$sort": {"timestamp": -1}},
+            {"$group": {
+                "_id": "$train_id",
+                "latest_log": {"$first": "$$ROOT"}
+            }},
+            {"$replaceRoot": {"newRoot": "$latest_log"}}
+        ]
+        
+        logs = await get_collection(cls.collection).aggregate(pipeline).to_list(length=None)
+        return logs
