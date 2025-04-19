@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status, Body, Path, Query, Depends
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
-from app.models.log import LogModel, LogOperations  # Add LogOperations here
+from app.models.log import LogOperations  # Changed from LogModel to LogOperations
 from app.models.train import TrainModel
 from app.schemas.log import LogCreate, LogUpdate, LogInDB
 from app.utils import handle_exceptions
@@ -117,7 +117,7 @@ async def get_logs_by_train(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, 
                           detail=f"Train with ID {train_id} not found")
     
-    logs = await LogModel.get_by_train_id(train_id, limit)
+    logs = await LogOperations.get_by_train_id(train_id, limit)  # Changed from LogModel to LogOperations
     return [LogInDB(**log) for log in logs]
 
 @router.get("/rfid/{rfid_tag}", 

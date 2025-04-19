@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
 from app.models.train import TrainModel
-from app.models.log import LogModel
+from app.models.log import LogOperations  # Changed from LogModel to LogOperations
 from app.models.alert import AlertModel
 from app.core.collision import check_all_train_collisions
 from app.core.location import detect_route_deviations, check_deviation_resolved
@@ -193,7 +193,7 @@ async def generate_system_status_report() -> Dict[str, Any]:
         for train_loc in train_locations:
             train_id = train_loc.get("train_id")
             if train_id:
-                logs = await LogModel.get_by_train_id(train_id, limit=3)
+                logs = await LogOperations.get_by_train_id(train_id, limit=3)
                 recent_logs.extend(logs)
         
         # Create the report

@@ -5,7 +5,7 @@ Implements logic to track train movements, detect stops, and monitor status.
 from typing import List, Dict, Any, Optional
 from app.models.train import TrainModel
 from app.models.route import RouteModel
-from app.models.log import LogModel
+from app.models.log import LogOperations  # Changed from LogModel to LogOperations
 from app.models.alert import AlertModel
 from app.utils import calculate_distance
 from app.config import SYSTEM_SENDER_ID, TRAIN_STATUS, DISTANCE_THRESHOLDS, GUEST_RECIPIENT_ID, get_current_ist_time
@@ -22,7 +22,7 @@ async def get_active_trains_locations() -> List[Dict[str, Any]]:
     locations = []
     
     for train in active_trains:
-        latest_log = await LogModel.get_latest_by_train(train["train_id"])
+        latest_log = await LogOperations.get_latest_by_train(train["train_id"])  # Changed from LogModel to LogOperations
         if latest_log and latest_log.get("location"):
             locations.append({
                 "train_id": train["train_id"],
@@ -47,7 +47,7 @@ async def detect_train_status_change(train_id: str, movement_threshold: float = 
         Dict: Status change assessment
     """
     # Get last two logs to determine if train has moved
-    logs = await LogModel.get_by_train_id(train_id, limit=2)
+    logs = await LogOperations.get_by_train_id(train_id, limit=2)  # Changed from LogModel to LogOperations
     
     # Need at least 2 logs to detect movement
     if len(logs) < 2:

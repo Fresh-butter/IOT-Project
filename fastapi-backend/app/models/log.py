@@ -4,9 +4,9 @@ Defines the structure and operations for log data in MongoDB.
 """
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone
-from app.database import get_collection
+from app.database import get_collection, safe_db_operation
 from app.config import get_current_ist_time
-from app.utils import round_coordinates
+from app.utils import round_coordinates, normalize_timestamp  # Add this import
 from typing import List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field, root_validator
 
@@ -44,22 +44,25 @@ class LogModel(BaseModel):
 class LogOperations:
     collection = "logs"
 
-    @staticmethod
-    async def create(log_data: dict):
+    @classmethod
+    async def create(cls, log_data: dict) -> str:
         """Create a new log entry with proper timezone handling"""
         async def operation():
             # Make a copy to avoid modifying the original
             log_data_copy = log_data.copy()
             
-            # Handle timestamp - normalize to IST
-            if "timestamp" in log_data_copy:
-                if log_data_copy["timestamp"] is None:
-                    log_data_copy["timestamp"] = get_current_ist_time()
-                else:
-                    log_data_copy["timestamp"] = normalize_timestamp(log_data_copy["timestamp"])
-            else:
+            # Simplified timestamp handling - assume it's already in IST format
+            if "timestamp" not in log_data_copy or log_data_copy["timestamp"] is None:
                 log_data_copy["timestamp"] = get_current_ist_time()
-                
+            else:
+                # If string, parse it; if already datetime, use as-is
+                if isinstance(log_data_copy["timestamp"], str):
+                    try:
+                        log_data_copy["timestamp"] = datetime.fromisoformat(log_data_copy["timestamp"].replace('Z', '+00:00'))
+                    except ValueError:
+                        # If parsing fails, use current time
+                        log_data_copy["timestamp"] = get_current_ist_time()
+            
             # Convert train_ref string to ObjectId for MongoDB storage
             if "train_ref" in log_data_copy and isinstance(log_data_copy["train_ref"], str):
                 log_data_copy["train_ref"] = ObjectId(log_data_copy["train_ref"])
