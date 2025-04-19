@@ -17,7 +17,7 @@ async function fetchTrainData() {
   loader.style.display = 'flex'; // Show loader
 
   try {
-    const response = await fetch('API_URL_HERE'); // Replace with actual API URL
+    const response = await fetch('https://iot-project-c3wb.onrender.com'); // Replace with actual API URL
     const data = await response.json();
 
     // Clear existing markers
