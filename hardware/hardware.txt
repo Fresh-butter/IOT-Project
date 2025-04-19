@@ -9,8 +9,8 @@
 #include <time.h>
 
 // WiFi credentials
-const char* ssid = "Nav";       // Replace with your WiFi SSID
-const char* password = "Navneet123#"; // Replace with your WiFi password
+const char* ssid = "iphone";       // Replace with your WiFi SSID
+const char* password = "amish@986"; // Replace with your WiFi password
 
 // API endpoint
 const char* apiEndpoint = "https://iot-project-c3wb.onrender.com/api/logs/";
@@ -23,7 +23,7 @@ const int   daylightOffset_sec = 0; // No DST in India
 // Train identification (configure as needed)
 const char* TRAIN_ID = "205";  // Updated to match schema example
 const char* TRAIN_REF = "680296fc63fe290a1ff7e5c4";  // Updated to match schema example
-const bool IS_TEST = false;
+const bool IS_TEST = true;
 
 // Pin definitions
 #define RXD2 16
@@ -53,7 +53,8 @@ struct SensorData {
   int satellites = 0;
   float hdop = 0;
   String dateTime = "";
-  String isoDateTime = "";  // ISO8601 format for API
+  String isoDateTimeIST = "";  // ISO8601 format with IST timezone for display
+  String isoDateTimeUTC = "";  // ISO8601 format in UTC for API submission
   
   // Validity flags
   bool rfidValid = false;
@@ -177,6 +178,7 @@ void syncTimeFromNTP() {
   }
 }
 
+// Update the updateTimeData() function to provide both UTC and IST timestamps
 void updateTimeData() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
@@ -185,15 +187,28 @@ void updateTimeData() {
   }
   
   char dateBuffer[30];
-  char isoBuffer[30];
+  char isoBufferIST[30];
+  char isoBufferUTC[30];
   
-  // Format for display: YYYY/MM/DD,HH:MM:SS IST
+  // Format for display: YYYY/MM/DD,HH:MM:SS IST (for local display only)
   strftime(dateBuffer, sizeof(dateBuffer), "%Y/%m/%d,%H:%M:%S IST", &timeinfo);
   sensorData.dateTime = String(dateBuffer);
   
-  // Create ISO8601 format for API: YYYY-MM-DDTHH:MM:SS+05:30
-  strftime(isoBuffer, sizeof(isoBuffer), "%Y-%m-%dT%H:%M:%S+05:30", &timeinfo);
-  sensorData.isoDateTime = String(isoBuffer);
+  // Create IST ISO8601 format: YYYY-MM-DDTHH:MM:SS+05:30 (for display purposes)
+  strftime(isoBufferIST, sizeof(isoBufferIST), "%Y-%m-%dT%H:%M:%S+05:30", &timeinfo);
+  
+  // Get UTC time (subtract GMT offset)
+  time_t now = time(nullptr);
+  time_t utcTime = now - gmtOffset_sec;
+  struct tm utcTimeinfo;
+  gmtime_r(&utcTime, &utcTimeinfo);
+  
+  // Create UTC ISO8601 format: YYYY-MM-DDTHH:MM:SSZ (for API submission)
+  strftime(isoBufferUTC, sizeof(isoBufferUTC), "%Y-%m-%dT%H:%M:%SZ", &utcTimeinfo);
+  
+  // Store both formats, but use UTC for API
+  sensorData.isoDateTimeIST = String(isoBufferIST);
+  sensorData.isoDateTimeUTC = String(isoBufferUTC);
 }
 
 void readRfidCard() {
@@ -244,6 +259,7 @@ void readGpsData() {
   }
 }
 
+// Update the printCombinedData function to show both timestamps
 void printCombinedData() {
   Serial.println("\n----- COMBINED DATA -----");
   
@@ -289,13 +305,20 @@ void printCombinedData() {
   Serial.print("  HDOP: "); 
   Serial.println(gps.hdop.isValid() ? String(sensorData.hdop) : "null");
   
-  // Print date/time data - now from NTP
-  Serial.print("  Date/Time: ");
+  // Print date/time data
+  Serial.print("  Date/Time (IST): ");
   Serial.println(sensorData.dateTime);
+  
+  Serial.print("  ISO Date/Time (UTC): ");
+  Serial.println(sensorData.isoDateTimeUTC);
+  
+  Serial.print("  ISO Date/Time (IST): ");
+  Serial.println(sensorData.isoDateTimeIST);
   
   Serial.println("-------------------------------------------\n");
 }
 
+// Update the sendDataToAPI function to use UTC timestamp
 void sendDataToAPI() {
   // Only proceed if WiFi is connected
   if (WiFi.status() != WL_CONNECTED) {
@@ -311,7 +334,9 @@ void sendDataToAPI() {
   StaticJsonDocument<512> jsonDoc;
   jsonDoc["train_id"] = TRAIN_ID;
   jsonDoc["train_ref"] = TRAIN_REF;
-  jsonDoc["timestamp"] = sensorData.isoDateTime;
+  
+  // Use UTC timestamp for API submission to match backend storage format
+  jsonDoc["timestamp"] = sensorData.isoDateTimeUTC;
   
   // Handle RFID tag - properly set null in JSON when no tag detected
   if (sensorData.rfidUid != "null") {

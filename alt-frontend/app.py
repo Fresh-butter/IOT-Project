@@ -4,14 +4,14 @@ import requests
 app = Flask(__name__)
 
 # Backend API base URL
-API_BASE_URL = "https://iot-project-c3wb.onrender.com"  # Ensure no trailing slash
+API_BASE_URL = "https://iot-project-c3wb.onrender.com/api"  # Updated URL structure
 
 @app.route('/')
 def index():
     try:
-        # Fetch data from the backend
-        trains = requests.get(f"{API_BASE_URL}/trains").json()
-        alerts = requests.get(f"{API_BASE_URL}/alerts").json()
+        # Fetch data from the backend with correct endpoint paths
+        trains = requests.get(f"{API_BASE_URL}/trains/").json()
+        alerts = requests.get(f"{API_BASE_URL}/alerts/").json()
     except requests.exceptions.RequestException as e:
         print(f"Error fetching data: {e}")
         trains = []
