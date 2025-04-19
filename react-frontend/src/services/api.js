@@ -5,7 +5,7 @@ const API_BASE_URL = 'https://iot-project-c3wb.onrender.com';
 // Example function to fetch live data
 export const getLiveData = async () => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/routes/`);
+    const response = await axios.get(`${API_BASE_URL}/api/trains/`);
     return response.data;
   } catch (error) {
     console.error('Error fetching live data:', error);
