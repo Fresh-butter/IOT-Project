@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from app.models.train import TrainModel
 from app.models.route import RouteModel
-from app.models.log import LogModel
+from app.models.log import LogOperations
 from app.models.alert import AlertModel
 from app.utils import calculate_distance
 from app.config import DISTANCE_THRESHOLDS, SYSTEM_SENDER_ID, get_current_utc_time
@@ -73,7 +73,7 @@ async def detect_route_deviations(train_id: str, distance_threshold: float = Non
         }
     
     # Get latest log entry with location data
-    latest_log = await LogModel.get_latest_by_train(train_id)
+    latest_log = await LogOperations.get_latest_by_train(train_id)
     if not latest_log or not latest_log.get("location"):
         return {
             "train_id": train_id,

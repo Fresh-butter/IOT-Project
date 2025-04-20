@@ -126,20 +126,12 @@ class LogOperations:
         return await get_collection(LogOperations.collection).find_one({"_id": ObjectId(id)})
 
     @staticmethod
-    async def get_by_train_id(train_id: str, limit: int = 100):
-        """
-        Fetch logs for a specific train
-        
-        Args:
-            train_id: Train identifier
-            limit: Maximum number of logs to return
-            
-        Returns:
-            list: List of log documents
-        """
-        logs = await get_collection(LogOperations.collection).find(
-            {"train_id": train_id}
-        ).sort("timestamp", -1).limit(limit).to_list(limit)
+    async def get_by_train_id(train_id: str, limit: int = 10):
+        """Get logs for a train, excluding test logs"""
+        logs = await db[COLLECTION_NAME].find(
+            {"train_id": train_id, "is_test": False},
+            sort=[("timestamp", -1)]
+        ).limit(limit).to_list(length=limit)
         return logs
 
     @staticmethod
@@ -180,20 +172,12 @@ class LogOperations:
 
     @staticmethod
     async def get_latest_by_train(train_id: str):
-        """
-        Get the most recent log entry for a specific train
-        
-        Args:
-            train_id: Train identifier
-            
-        Returns:
-            dict: Most recent log document or None if not found
-        """
-        logs = await get_collection(LogOperations.collection).find(
-            {"train_id": train_id}
-        ).sort("timestamp", -1).limit(1).to_list(1)
-        
-        return logs[0] if logs else None
+        """Get the latest log for a train, excluding test logs"""
+        log = await get_collection(LogOperations.collection).find_one(
+            {"train_id": train_id, "is_test": False},
+            sort=[("timestamp", -1)]
+        )
+        return log
 
     @staticmethod
     async def get_logs_by_rfid(rfid_tag: str, limit: int = 100):

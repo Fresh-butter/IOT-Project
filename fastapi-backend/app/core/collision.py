@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from app.models.train import TrainModel
-from app.models.log import LogModel
+from app.models.log import LogOperations
 from app.models.alert import AlertModel
 from app.utils import calculate_distance
 from app.config import DISTANCE_THRESHOLDS, SYSTEM_SENDER_ID, get_current_utc_time
@@ -17,8 +17,8 @@ async def check_collision_risk(train1_id: str, train2_id: str) -> Dict[str, Any]
         Dict: Collision risk assessment
     """
     # Get latest logs for both trains
-    log1 = await LogModel.get_latest_by_train(train1_id)
-    log2 = await LogModel.get_latest_by_train(train2_id)
+    log1 = await LogOperations.get_latest_by_train(train1_id)
+    log2 = await LogOperations.get_latest_by_train(train2_id)
     
     # Initialize result
     result = {

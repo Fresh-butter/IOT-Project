@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
 from app.models.train import TrainModel
-from app.models.log import LogOperations  # Changed from LogModel to LogOperations
+from app.models.log import LogOperations
 from app.models.alert import AlertModel
 from app.core.collision import check_all_train_collisions
 from app.core.location import detect_route_deviations, check_deviation_resolved
@@ -137,6 +137,18 @@ async def monitor_train_deviations():
         logger.error(f"Error in route deviation monitoring: {str(e)}")
         return []
 
+async def monitor_route_deviations():
+    """Monitor route deviations for all active trains"""
+    logger.info("Running route deviation monitoring")
+    
+    try:
+        active_trains = await TrainModel.get_active_trains()
+        for train in active_trains:
+            latest_log = await LogOperations.get_latest_by_train(train["train_id"])  # FIXED
+            # Additional logic for monitoring deviations can be added here
+    except Exception as e:
+        logger.error(f"Error in route deviation monitoring: {str(e)}")
+
 async def monitor_train_status():
     """Check for train status changes (stopped/resumed)"""
     logger.info("Running train status check")
@@ -219,7 +231,7 @@ async def generate_system_status_report() -> Dict[str, Any]:
             "system_status": "error"
         }
 
-async def start_monitoring(interval_seconds: int = 60, stop_event=None):
+async def start_monitoring(interval_seconds: int = 10, stop_event=None):
     """
     Start background monitoring tasks with specified interval
     

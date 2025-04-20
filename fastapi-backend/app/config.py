@@ -50,7 +50,7 @@ DISTANCE_THRESHOLDS = {
     "COLLISION_CRITICAL": 10,     # Critical collision risk if trains are within 50m
     "COLLISION_WARNING": 15,     # Warning collision risk if trains are within 100m (was 500m)
     "ROUTE_DEVIATION": 10,       # Route deviation if train is 100m from expected path
-    "CHECKPOINT_PROXIMITY": 10    # Train is considered at checkpoint if within 50m
+    "CHECKPOINT_PROXIMITY": 10    # Train is considered at checkpoint if within 10m
 }
 
 # Direct distance constants for backward compatibility
@@ -61,11 +61,11 @@ COLLISION_WARNING_DISTANCE = DISTANCE_THRESHOLDS["COLLISION_WARNING"]
 TIME_THRESHOLDS = {
     "SCHEDULE_DELAY": 300,        # 5 minutes delay is considered significant
     "LOG_EXPIRY": 30 * 24 * 60 * 60,  # Keep logs for 30 days
-    "PREDICTION_WINDOW": 1 * 60  # Predict collisions 15 minutes in advance
+    "PREDICTION_WINDOW": 1 * 60  # Predict collisions 1 minutes in advance
 }
 
 # Schedule settings
-MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "60"))
+MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "10"))
 LOG_CLEANUP_DAYS = int(os.getenv("LOG_CLEANUP_DAYS", "30"))
 
 # IST timezone settings (for response formatting)
