@@ -9,8 +9,8 @@
 #include <time.h>
 
 // WiFi credentials
-const char* ssid = "iphone";       // Replace with your WiFi SSID
-const char* password = "amish@986"; // Replace with your WiFi password
+const char* ssid = "Nav";       // Replace with your WiFi SSID
+const char* password = "Navneet123#"; // Replace with your WiFi password
 
 // API endpoint
 const char* apiEndpoint = "https://iot-project-c3wb.onrender.com/api/logs/";
