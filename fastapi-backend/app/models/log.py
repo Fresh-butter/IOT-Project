@@ -128,7 +128,7 @@ class LogOperations:
     @staticmethod
     async def get_by_train_id(train_id: str, limit: int = 10):
         """Get logs for a train, excluding test logs"""
-        logs = await db[COLLECTION_NAME].find(
+        logs = await get_collection(LogOperations.collection).find(
             {"train_id": train_id, "is_test": False},
             sort=[("timestamp", -1)]
         ).limit(limit).to_list(length=limit)
@@ -191,9 +191,10 @@ class LogOperations:
         Returns:
             list: List of log documents containing the specified RFID tag
         """
-        logs = await get_collection(LogOperations.collection).find(
-            {"rfid_tag": rfid_tag}
-        ).sort("timestamp", -1).limit(limit).to_list(limit)
+        logs = await get_collection(LogOperations.collection).find({
+            "rfid_tag": rfid_tag,
+            "is_test": False  # Add this filter
+        }).sort("timestamp", -1).limit(limit).to_list(limit)
         return logs
 
     @staticmethod
@@ -215,6 +216,7 @@ class LogOperations:
         
         logs = await get_collection(LogOperations.collection).find({
             "train_id": train_id,
+            "is_test": False,  # Add this filter
             "timestamp": {
                 "$gte": start_time_utc,
                 "$lte": end_time_utc
@@ -237,6 +239,7 @@ class LogOperations:
         time_threshold = get_current_utc_time() - timedelta(hours=hours)
         logs = await get_collection(LogOperations.collection).find({
             "train_id": train_id,
+            "is_test": False,  # Add this filter
             "timestamp": {"$gte": time_threshold}
         }).sort("timestamp", 1).to_list(1000)
         return logs
@@ -254,7 +257,8 @@ class LogOperations:
         """
         timestamp_utc = normalize_timestamp(timestamp)
         logs = await get_collection(cls.collection).find({
-            "timestamp": {"$gte": timestamp_utc}
+            "timestamp": {"$gte": timestamp_utc},
+            "is_test": False  # Add this filter
         }).to_list(length=None)
         
         return logs
@@ -274,7 +278,8 @@ class LogOperations:
         timestamp_utc = normalize_timestamp(timestamp)
         logs = await get_collection(cls.collection).find({
             "train_id": train_id,
-            "timestamp": {"$gte": timestamp_utc}
+            "timestamp": {"$gte": timestamp_utc},
+            "is_test": False  # Add this filter
         }).sort("timestamp", 1).to_list(length=None)
         
         return logs
@@ -306,6 +311,7 @@ class LogOperations:
             list: Latest log document for each train
         """
         pipeline = [
+            {"$match": {"is_test": False}},  # Add this stage to filter out test logs
             {"$sort": {"timestamp": -1}},
             {"$group": {
                 "_id": "$train_id",

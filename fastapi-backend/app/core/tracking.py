@@ -35,120 +35,131 @@ async def get_active_trains_locations() -> List[Dict[str, Any]]:
     
     return locations
 
-async def detect_train_status_change(train_id: str, movement_threshold: float = 5.0) -> Dict[str, Any]:
-    """
-    Detect if a train has stopped or resumed movement
-    
-    Args:
-        train_id: Train identifier
-        movement_threshold: Minimum distance to consider movement (meters)
+async def detect_train_status_change(train_id: str) -> Dict[str, Any]:
+    """Detect if a train's status has changed"""
+    try:
+        # Get last two logs to determine if train has moved
+        logs = await LogOperations.get_by_train_id(train_id, limit=2)
         
-    Returns:
-        Dict: Status change assessment
-    """
-    # Get last two logs to determine if train has moved
-    logs = await LogOperations.get_by_train_id(train_id, limit=2)  # Changed from LogModel to LogOperations
-    
-    # Need at least 2 logs to detect movement
-    if len(logs) < 2:
+        # Need at least 2 logs to detect movement
+        if len(logs) < 2:
+            return {
+                "status_changed": False,
+                "message": "Insufficient log data"
+            }
+        
+        # Get train details
+        train = await TrainModel.get_by_train_id(train_id)
+        if not train:
+            return {
+                "status_changed": False,
+                "message": "Train not found"
+            }
+        
+        # Check if both logs have location data
+        if not logs[0].get("location") or not logs[1].get("location"):
+            return {
+                "status_changed": False,
+                "message": "Missing location data"
+            }
+        
+        # Convert dictionary format to list format
+        location1 = logs[0]["location"]
+        location2 = logs[1]["location"]
+        
+        if isinstance(location1, dict) and 'lat' in location1 and 'lng' in location1:
+            location1_list = [location1['lng'], location1['lat']]
+        else:
+            location1_list = location1
+            
+        if isinstance(location2, dict) and 'lat' in location2 and 'lng' in location2:
+            location2_list = [location2['lng'], location2['lat']]
+        else:
+            location2_list = location2
+            
+        # Calculate distance between the two points
+        distance_moved = calculate_distance(location1_list, location2_list)
+        
+        # Determine current status and if it needs to change
+        current_status = train.get("current_status")
+        status_changed = False
+        new_status = current_status
+        
+        # If train has moved less than threshold between logs and is currently running
+        if distance_moved < 5.0 and current_status == TRAIN_STATUS["IN_SERVICE_RUNNING"]:
+            # Train has stopped
+            new_status = TRAIN_STATUS["IN_SERVICE_NOT_RUNNING"]
+            status_changed = True
+            
+            # Create alert message
+            message = f"TRAIN_STOPPED: Train {train_id} stopped at {logs[0]['location']}"
+            
+            # Alert for the train
+            train_alert_data = {
+                "sender_ref": SYSTEM_SENDER_ID,
+                "recipient_ref": str(train["_id"]),
+                "message": message,
+                "location": logs[0]["location"],
+                "timestamp": get_current_utc_time()  # Changed from IST to UTC
+            }
+            await AlertModel.create(train_alert_data, create_guest_copy=False)
+            
+            # Guest alert
+            guest_alert_data = {
+                "sender_ref": SYSTEM_SENDER_ID,
+                "recipient_ref": GUEST_RECIPIENT_ID,
+                "message": message,
+                "location": logs[0]["location"],
+                "timestamp": get_current_utc_time()  # Changed from IST to UTC
+            }
+            await AlertModel.create(guest_alert_data, create_guest_copy=False)
+            
+        # If train has moved more than threshold between logs and is currently not running
+        elif distance_moved >= 5.0 and current_status == TRAIN_STATUS["IN_SERVICE_NOT_RUNNING"]:
+            # Train has resumed
+            new_status = TRAIN_STATUS["IN_SERVICE_RUNNING"]
+            status_changed = True
+            
+            # Create alert message
+            message = f"TRAIN_RESUMED: Train {train_id} resumed operation"
+            
+            # Alert for the train
+            train_alert_data = {
+                "sender_ref": SYSTEM_SENDER_ID,
+                "recipient_ref": str(train["_id"]),
+                "message": message,
+                "location": logs[0]["location"],
+                "timestamp": get_current_utc_time()  # Changed from IST to UTC
+            }
+            await AlertModel.create(train_alert_data, create_guest_copy=False)
+            
+            # Guest alert
+            guest_alert_data = {
+                "sender_ref": SYSTEM_SENDER_ID,
+                "recipient_ref": GUEST_RECIPIENT_ID,
+                "message": message,
+                "location": logs[0]["location"],
+                "timestamp": get_current_utc_time()  # Changed from IST to UTC
+            }
+            await AlertModel.create(guest_alert_data, create_guest_copy=False)
+        
+        # If status changed, update in database
+        if status_changed:
+            await TrainModel.update_status(str(train["_id"]), new_status)
+        
+        return {
+            "train_id": train_id,
+            "status_changed": status_changed,
+            "previous_status": current_status,
+            "new_status": new_status,
+            "distance_moved": distance_moved,
+            "location": logs[0]["location"]
+        }
+    except Exception as e:
         return {
             "status_changed": False,
-            "message": "Insufficient log data"
+            "message": f"Error occurred: {str(e)}"
         }
-    
-    # Get train details
-    train = await TrainModel.get_by_train_id(train_id)
-    if not train:
-        return {
-            "status_changed": False,
-            "message": "Train not found"
-        }
-    
-    # Check if both logs have location data
-    if not logs[0].get("location") or not logs[1].get("location"):
-        return {
-            "status_changed": False,
-            "message": "Missing location data"
-        }
-    
-    # Calculate distance moved
-    distance_moved = calculate_distance(logs[0]["location"], logs[1]["location"])
-    
-    # Determine current status and if it needs to change
-    current_status = train.get("current_status")
-    status_changed = False
-    new_status = current_status
-    
-    # If train has moved less than threshold between logs and is currently running
-    if distance_moved < movement_threshold and current_status == TRAIN_STATUS["IN_SERVICE_RUNNING"]:
-        # Train has stopped
-        new_status = TRAIN_STATUS["IN_SERVICE_NOT_RUNNING"]
-        status_changed = True
-        
-        # Create alert message
-        message = f"TRAIN_STOPPED: Train {train_id} stopped at {logs[0]['location']}"
-        
-        # Alert for the train
-        train_alert_data = {
-            "sender_ref": SYSTEM_SENDER_ID,
-            "recipient_ref": str(train["_id"]),
-            "message": message,
-            "location": logs[0]["location"],
-            "timestamp": get_current_utc_time()  # Changed from IST to UTC
-        }
-        await AlertModel.create(train_alert_data, create_guest_copy=False)
-        
-        # Guest alert
-        guest_alert_data = {
-            "sender_ref": SYSTEM_SENDER_ID,
-            "recipient_ref": GUEST_RECIPIENT_ID,
-            "message": message,
-            "location": logs[0]["location"],
-            "timestamp": get_current_utc_time()  # Changed from IST to UTC
-        }
-        await AlertModel.create(guest_alert_data, create_guest_copy=False)
-        
-    # If train has moved more than threshold between logs and is currently not running
-    elif distance_moved >= movement_threshold and current_status == TRAIN_STATUS["IN_SERVICE_NOT_RUNNING"]:
-        # Train has resumed
-        new_status = TRAIN_STATUS["IN_SERVICE_RUNNING"]
-        status_changed = True
-        
-        # Create alert message
-        message = f"TRAIN_RESUMED: Train {train_id} resumed operation"
-        
-        # Alert for the train
-        train_alert_data = {
-            "sender_ref": SYSTEM_SENDER_ID,
-            "recipient_ref": str(train["_id"]),
-            "message": message,
-            "location": logs[0]["location"],
-            "timestamp": get_current_utc_time()  # Changed from IST to UTC
-        }
-        await AlertModel.create(train_alert_data, create_guest_copy=False)
-        
-        # Guest alert
-        guest_alert_data = {
-            "sender_ref": SYSTEM_SENDER_ID,
-            "recipient_ref": GUEST_RECIPIENT_ID,
-            "message": message,
-            "location": logs[0]["location"],
-            "timestamp": get_current_utc_time()  # Changed from IST to UTC
-        }
-        await AlertModel.create(guest_alert_data, create_guest_copy=False)
-    
-    # If status changed, update in database
-    if status_changed:
-        await TrainModel.update_status(str(train["_id"]), new_status)
-    
-    return {
-        "train_id": train_id,
-        "status_changed": status_changed,
-        "previous_status": current_status,
-        "new_status": new_status,
-        "distance_moved": distance_moved,
-        "location": logs[0]["location"]
-    }
 
 async def update_train_progress(train_id: str, log_data: Dict[str, Any]) -> Dict[str, Any]:
     """

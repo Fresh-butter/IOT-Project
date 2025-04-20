@@ -119,8 +119,16 @@ class AlertModel:
                     pass
             
             # Round coordinates if location is present
-            if "location" in alert_data and alert_data["location"]:
-                alert_data["location"] = round_coordinates(alert_data["location"])
+            if "location" in alert_data:
+                # If location is a dictionary, we need to ensure it stays a dictionary
+                if isinstance(alert_data["location"], dict):
+                    alert_data["location"] = {
+                        'lat': round(alert_data["location"]['lat'], 5),
+                        'lng': round(alert_data["location"]['lng'], 5)
+                    }
+                else:
+                    # Use the existing round_coordinates for list format
+                    alert_data["location"] = round_coordinates(alert_data["location"])
             
             # Create the alert
             result = await get_collection(AlertModel.collection).insert_one(alert_data)

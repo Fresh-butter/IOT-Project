@@ -6,12 +6,12 @@ from app.models.alert import AlertModel
 from app.utils import calculate_distance
 from app.config import DISTANCE_THRESHOLDS, SYSTEM_SENDER_ID, get_current_utc_time
 
-async def calculate_distance_to_route(location: List[float], route_checkpoints: List[Dict]) -> float:
+async def calculate_distance_to_route(location, route_checkpoints: List[Dict]) -> float:
     """
     Calculate minimum distance from a location to a route (defined by checkpoints)
     
     Args:
-        location: [longitude, latitude] coordinates
+        location: [longitude, latitude] coordinates or dictionary with 'lat' and 'lng'
         route_checkpoints: List of checkpoint dictionaries with 'location' field
         
     Returns:
@@ -19,6 +19,12 @@ async def calculate_distance_to_route(location: List[float], route_checkpoints: 
     """
     if not location or not route_checkpoints:
         return float('inf')
+    
+    # Convert dictionary format to list format if needed
+    if isinstance(location, dict) and 'lat' in location and 'lng' in location:
+        location_list = [location['lng'], location['lat']]
+    else:
+        location_list = location
     
     # Calculate distance to each line segment in the route
     min_distance = float('inf')
@@ -30,10 +36,9 @@ async def calculate_distance_to_route(location: List[float], route_checkpoints: 
         if not cp1_loc or not cp2_loc:
             continue
         
-        # Simple approach - find distance to each line segment
-        # by calculating distance to each endpoint
-        d1 = calculate_distance(location, cp1_loc)
-        d2 = calculate_distance(location, cp2_loc)
+        # Calculate distances to endpoints
+        d1 = calculate_distance(location_list, cp1_loc)
+        d2 = calculate_distance(location_list, cp2_loc)
         
         segment_min = min(d1, d2)
         min_distance = min(min_distance, segment_min)
