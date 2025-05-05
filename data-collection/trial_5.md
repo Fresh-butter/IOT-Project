@@ -1,0 +1,91 @@
+# Trial Run #5
+
+## Summary
+
+- Date & Time: April 20, 2025, 11:30-13:00 PM IST  
+- Trains Involved: Train 201 (OBH Express) and Train 207 (OBH-Nilgiri Express)
+- Route: R207 (OBH to Nilgiri)
+- Purpose: Retest collision detection after algorithm adjustment
+- Total Logs: 64
+- Total Alerts: 6
+
+## Logs
+
+```csv
+timestamp,train_id,location,rfid_tag,accuracy,is_test
+2025-04-20T11:35:15+05:30,207,"17.44543,78.34637","null",excellent,false
+2025-04-20T11:35:22+05:30,207,"17.44546,78.34640",null,good,false
+2025-04-20T11:35:30+05:30,207,"17.44549,78.34644",null,moderate,false
+2025-04-20T11:35:39+05:30,207,"17.44552,78.34648",null,good,false
+2025-04-20T11:35:46+05:30,207,"17.44556,78.34654",null,moderate,false
+2025-04-20T11:35:54+05:30,207,"17.44561,78.34659",null,good,false
+2025-04-20T11:36:02+05:30,207,"17.44567,78.34665",null,moderate,false
+2025-04-20T11:36:10+05:30,201,"17.44752,78.34874","null",excellent,false
+2025-04-20T11:36:11+05:30,207,"17.44572,78.34670",null,good,false
+2025-04-20T11:36:18+05:30,201,"17.44747,78.34860",null,moderate,false
+2025-04-20T11:36:19+05:30,207,"17.44578,78.34674",null,moderate,false
+2025-04-20T11:36:26+05:30,201,"17.44743,78.34847",null,good,false
+2025-04-20T11:36:28+05:30,207,"17.44583,78.34678",null,good,false
+2025-04-20T11:36:34+05:30,201,"17.44739,78.34835",null,moderate,false
+2025-04-20T11:36:38+05:30,207,"17.44590,78.34685",null,moderate,false
+2025-04-20T11:36:42+05:30,201,"17.44735,78.34824",null,good,false
+2025-04-20T11:36:48+05:30,207,"17.44596,78.34692",null,good,false
+2025-04-20T11:36:50+05:30,201,"17.44731,78.34814",null,excellent,false
+2025-04-20T11:36:57+05:30,207,"17.44603,78.34699",null,moderate,false
+2025-04-20T11:36:58+05:30,201,"17.44721,78.34796",null,good,false
+2025-04-20T11:37:06+05:30,207,"17.44610,78.34706",null,good,false
+2025-04-20T11:37:07+05:30,201,"17.44710,78.34781",null,moderate,false
+2025-04-20T11:37:15+05:30,207,"17.44617,78.34713",null,moderate,false
+2025-04-20T11:37:25+05:30,201,"17.44685,78.34753",null,moderate,false
+2025-04-20T11:37:33+05:30,207,"17.44632,78.34727",null,moderate,false
+2025-04-20T11:37:34+05:30,201,"17.44671,78.34739",null,good,false
+2025-04-20T11:37:42+05:30,207,"17.44639,78.34733",null,excellent,false
+2025-04-20T11:37:43+05:30,201,"17.44656,78.34734",null,moderate,false
+2025-04-20T11:37:51+05:30,207,"17.44640,78.34733","null",good,false
+2025-04-20T11:37:52+05:30,201,"17.44641,78.34733",null,good,false
+2025-04-20T11:38:00+05:30,207,"17.44641,78.34733",null,moderate,false
+2025-04-20T11:38:01+05:30,201,"17.44641,78.34732","null",excellent,false
+2025-04-20T11:38:10+05:30,207,"17.44641,78.34733",null,good,false
+2025-04-20T11:38:11+05:30,201,"17.44640,78.34732",null,moderate,false
+2025-04-20T11:38:18+05:30,207,"17.44640,78.34734",null,moderate,false
+2025-04-20T11:38:19+05:30,201,"17.44640,78.34731",null,good,false
+2025-04-20T11:38:27+05:30,207,"17.44640,78.34734",null,good,false
+2025-04-20T11:38:28+05:30,201,"17.44640,78.34732",null,moderate,false
+2025-04-20T11:38:36+05:30,207,"17.44641,78.34733",null,moderate,false
+2025-04-20T11:38:45+05:30,207,"17.44640,78.34733",null,good,false
+2025-04-20T11:38:46+05:30,201,"17.44640,78.34732",null,moderate,false
+2025-04-20T11:38:54+05:30,207,"17.44641,78.34732",null,moderate,false
+2025-04-20T11:38:55+05:30,201,"17.44640,78.34732",null,good,false
+2025-04-20T11:39:03+05:30,207,"17.44641,78.34733",null,good,false
+2025-04-20T11:39:04+05:30,201,"17.44640,78.34731",null,moderate,false
+2025-04-20T11:39:12+05:30,207,"17.44641,78.34732",null,moderate,false
+2025-04-20T11:39:13+05:30,201,"17.44640,78.34732",null,poor,false
+2025-04-20T11:39:21+05:30,207,"17.44640,78.34733",null,good,false
+2025-04-20T11:39:22+05:30,201,"17.44640,78.34731",null,moderate,false
+2025-04-20T11:39:31+05:30,207,"17.44634,78.34729",null,moderate,false
+2025-04-20T11:39:32+05:30,201,"17.44632,78.34725",null,good,false
+2025-04-20T11:39:40+05:30,207,"17.44626,78.34723",null,good,false
+2025-04-20T11:39:41+05:30,201,"17.44624,78.34719",null,moderate,false
+2025-04-20T11:39:49+05:30,207,"17.44619,78.34717",null,moderate,false
+2025-04-20T11:39:59+05:30,201,"17.44607,78.34707",null,moderate,false
+2025-04-20T11:40:07+05:30,207,"17.44604,78.34705",null,moderate,false
+2025-04-20T11:40:08+05:30,201,"17.44598,78.34699",null,good,false
+2025-04-20T11:40:16+05:30,207,"17.44597,78.34698",null,good,false
+2025-04-20T11:40:17+05:30,201,"17.44590,78.34692",null,moderate,false
+2025-04-20T11:40:25+05:30,207,"17.44589,78.34691",null,moderate,false
+2025-04-20T11:40:26+05:30,201,"17.44583,78.34684",null,good,false
+2025-04-20T11:40:34+05:30,207,"17.44583,78.34685",null,good,false
+2025-04-20T11:40:43+05:30,207,"17.44576,78.34677",null,moderate,false
+2025-04-20T11:40:44+05:30,201,"17.44571,78.34671",null,good,false
+```
+## Alerts
+
+```csv
+timestamp,recipient,message,location
+2025-04-20T11:38:03+05:30,207,COLLISION_WARNING: Potential collision risk between Train 207 and Train 201,"17.44641,78.34733"
+2025-04-20T11:38:03+05:30,201,COLLISION_WARNING: Potential collision risk between Train 207 and Train 201,"17.44641,78.34733"
+2025-04-20T11:38:03+05:30,guest,COLLISION_WARNING: Potential collision risk between Train 207 and Train 201,"17.44641,78.34733"
+2025-04-20T11:39:33+05:30,207,COLLISION_RESOLVED: Collision risk between Train 207 and Train 201 resolved,"17.44633,78.34727"
+2025-04-20T11:39:33+05:30,201,COLLISION_RESOLVED: Collision risk between Train 207 and Train 201 resolved,"17.44633,78.34727"
+2025-04-20T11:39:33+05:30,guest,COLLISION_RESOLVED: Collision risk between Train 207 and Train 201 resolved,"17.44633,78.34727"
+```
