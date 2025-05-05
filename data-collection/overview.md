@@ -1,7 +1,7 @@
 # Train Tracking System - Trial Runs Overview
 
 ## Summary
-This document outlines the trial runs conducted to test the GPS & RFID-based Train Collision Avoidance System. Seven trial runs were executed testing various aspects of the system including basic functionality, collision detection, route deviation monitoring, and alert generation capabilities.
+This document outlines the trial runs conducted to test the GPS & RFID-based Train Collision Avoidance System. Six trial runs were executed testing various aspects of the system including basic functionality, collision detection, route deviation monitoring, and alert generation capabilities.
 
 ## Trial Run #1: Basic System Functionality
 **Date & Time:** April 19, 2025, 09:30-10:45 IST  
