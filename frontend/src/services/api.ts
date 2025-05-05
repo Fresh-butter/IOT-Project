@@ -7,7 +7,7 @@ export interface Checkpoint {
   name?: string;
   interval: number;
   rfid_tag?: string;
-  location: [number, number]; // [longitude, latitude]
+  location: [number, number]; // [lat, lon] as you confirmed
 }
 
 export interface Route {

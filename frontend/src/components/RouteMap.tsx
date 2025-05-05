@@ -1,4 +1,3 @@
-import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -6,7 +5,7 @@ import { Route } from '../services/api';
 import { Box, Paper, Typography } from '@mui/material';
 
 // Fix default icon issue in Leaflet
-delete (L.Icon.Default.prototype as any)._getIconUrl;
+delete (L.Icon.Default.prototype as { _getIconUrl?: () => string })._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
   iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
@@ -44,11 +43,13 @@ const RouteMap: React.FC<RouteMapProps> = ({ selectedRoute }) => {
   // Get route checkpoints
   const checkpoints = selectedRoute.checkpoints;
   
-  // Create line for route
+  // Create line for route - no need to swap coordinates if your API already uses [lat, lon]
   const routeLine = checkpoints.map(checkpoint => checkpoint.location);
 
   // Get center from first checkpoint or use default
-  const center = checkpoints.length > 0 ? checkpoints[0].location : defaultCenter;
+  const center: [number, number] = checkpoints.length > 0 
+    ? checkpoints[0].location
+    : defaultCenter;
   
   // Calculate appropriate zoom level
   const zoom = checkpoints.length > 0 ? 8 : defaultZoom;

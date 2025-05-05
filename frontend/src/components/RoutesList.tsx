@@ -8,7 +8,6 @@ import {
   Chip, 
   CircularProgress, 
   Alert,
-  Grid,
   Paper,
   Divider
 } from '@mui/material';
@@ -28,8 +27,12 @@ const RoutesList: React.FC = () => {
         const data = await fetchRoutes();
         setRoutes(data);
         setError(null);
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch routes');
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('Failed to fetch routes');
+        }
       } finally {
         setLoading(false);
       }
@@ -60,9 +63,10 @@ const RoutesList: React.FC = () => {
 
   return (
     <Box sx={{ py: 2 }}>
-      <Grid container spacing={3}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
+        
         {/* Left column: Routes list */}
-        <Grid item xs={12} md={5}>
+        <Box sx={{ width: { xs: '100%', md: '41.666%' } }}>
           <Typography variant="h5" component="h2" gutterBottom>
             Available Routes
           </Typography>
@@ -115,10 +119,10 @@ const RoutesList: React.FC = () => {
               ))
             )}
           </Box>
-        </Grid>
+        </Box>
         
         {/* Right column: Map and details */}
-        <Grid item xs={12} md={7}>
+        <Box sx={{ width: { xs: '100%', md: '58.333%' } }}>
           <Typography variant="h5" component="h2" gutterBottom>
             Route Map
           </Typography>
@@ -129,8 +133,9 @@ const RoutesList: React.FC = () => {
             <Paper elevation={2} sx={{ mt: 2, p: 2 }}>
               <Typography variant="h6" gutterBottom>Route Details</Typography>
               
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                {/* Left details column */}
+                <Box sx={{ flexBasis: { xs: '100%', sm: 'calc(50% - 1rem)' } }}>
                   <Typography variant="body2">
                     <strong>Name:</strong> {selectedRoute.route_name}
                   </Typography>
@@ -142,9 +147,10 @@ const RoutesList: React.FC = () => {
                       <strong>Assigned Train:</strong> {selectedRoute.assigned_train_id}
                     </Typography>
                   )}
-                </Grid>
+                </Box>
                 
-                <Grid item xs={12} sm={6}>
+                {/* Right details column */}
+                <Box sx={{ flexBasis: { xs: '100%', sm: 'calc(50% - 1rem)' } }}>
                   {selectedRoute.start_time && (
                     <Typography variant="body2">
                       <strong>Start Time:</strong> {new Date(selectedRoute.start_time).toLocaleString()}
@@ -153,9 +159,10 @@ const RoutesList: React.FC = () => {
                   <Typography variant="body2">
                     <strong>Checkpoints:</strong> {selectedRoute.checkpoints.length}
                   </Typography>
-                </Grid>
+                </Box>
                 
-                <Grid item xs={12}>
+                {/* Full width bottom section */}
+                <Box sx={{ width: '100%' }}>
                   <Divider sx={{ my: 1 }} />
                   <Typography variant="subtitle2">Checkpoint Names:</Typography>
                   <Box sx={{ mt: 1 }}>
@@ -168,12 +175,12 @@ const RoutesList: React.FC = () => {
                       />
                     ))}
                   </Box>
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
             </Paper>
           )}
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </Box>
   );
 };
