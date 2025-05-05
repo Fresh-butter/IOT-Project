@@ -41,12 +41,12 @@
  * - LED blinks briefly when HTTP request is successful
  * - LED turns off when WiFi connection fails
  * - LED turns on again if WiFi reconnects
+ * - LED blinks continuously if train encounters any risk
  * 
  * Button Control:
  * - Press to toggle train operation mode:
  *   * When enabled: Sets train to "in_service_running" and begins sending location logs
  *   * When disabled: Sets train to "maintenance" and stops sending location logs
- * 
  */
 
 #include <MFRC522v2.h>
