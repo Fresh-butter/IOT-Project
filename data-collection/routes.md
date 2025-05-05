@@ -1,65 +1,8 @@
-[
-  {
-    "train_id": "202",
-    "name": "Himalaya-OBH Express",
-    "current_status": "maintenance",
-    "current_route_id": "R202",
-    "current_route_ref": "680278d963fe290a1ff7e54a",
-    "_id": "6802968463fe290a1ff7e5b8"
-  },
-  {
-    "train_id": "203",
-    "name": "Main-Gate-Parijat Express",
-    "current_status": "maintenance",
-    "current_route_id": "R203",
-    "current_route_ref": "68027daa63fe290a1ff7e54c",
-    "_id": "680296aa63fe290a1ff7e5bc"
-  },
-  {
-    "train_id": "204",
-    "name": "Amphitheatre-Vindhya Express",
-    "current_status": "maintenance",
-    "current_route_id": "R204",
-    "current_route_ref": "68027fc663fe290a1ff7e54e",
-    "_id": "680296d563fe290a1ff7e5c0"
-  },
-  {
-    "train_id": "205",
-    "name": "Himalaya-Main Gate",
-    "current_status": "maintenance",
-    "current_route_id": "R205",
-    "current_route_ref": "6802885963fe290a1ff7e551",
-    "_id": "680296fc63fe290a1ff7e5c4"
-  },
-  {
-    "train_id": "206",
-    "name": "Main Gate-Nilgiri Express",
-    "current_status": "maintenance",
-    "current_route_id": "R206",
-    "current_route_ref": "68028df763fe290a1ff7e554",
-    "_id": "6802972663fe290a1ff7e5c8"
-  },
-  {
-    "train_id": "207",
-    "name": "OBH-Nilgiri Express",
-    "current_status": "maintenance",
-    "current_route_id": "R207",
-    "current_route_ref": "68028ff463fe290a1ff7e556",
-    "_id": "6802974963fe290a1ff7e5cc"
-  },
-  {
-    "train_id": "201",
-    "name": "OBH Express",
-    "current_status": "maintenance",
-    "current_route_id": "R201",
-    "current_route_ref": "6804620f92de0c2d3061d84d",
-    "_id": "6804623d92de0c2d3061d850"
-  }
-]
-
-Response head
 
 
+##Routes
+
+```json
 [
   {
     "route_id": "R202",
@@ -365,43 +308,6 @@ Response head
     "_id": "68028ff463fe290a1ff7e556"
   },
   {
-    "route_id": "R302",
-    "route_name": "Delhi to Mumbai",
-    "start_time": null,
-    "assigned_train_id": null,
-    "assigned_train_ref": null,
-    "checkpoints": [
-      {
-        "name": null,
-        "interval": 0,
-        "rfid_tag": "RFID_101_A1",
-        "location": [
-          28.6139,
-          77.209
-        ]
-      },
-      {
-        "name": "station_beta",
-        "interval": 3600,
-        "rfid_tag": null,
-        "location": [
-          28.7041,
-          77.1025
-        ]
-      },
-      {
-        "name": null,
-        "interval": 7200,
-        "rfid_tag": "RFID_101_B2",
-        "location": [
-          28.7041,
-          76.8512
-        ]
-      }
-    ],
-    "_id": "68035c5792de0c2d3061d815"
-  },
-  {
     "route_id": "R201",
     "route_name": "Nilgiri to OBH",
     "start_time": null,
@@ -457,3 +363,5 @@ Response head
     "_id": "6804620f92de0c2d3061d84d"
   }
 ]
+
+```
